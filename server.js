@@ -22,27 +22,55 @@ app.use('/api', dashboardRoutes);
 
 // Database Connection
 let isConnected = false;
-const connectDB = async () => {
+
+const connectDB = async (retries = 5, delay = 3000) => {
     if (isConnected) return;
-    try {
-        const db = await mongoose.connect(MONGODB_URI);
-        isConnected = db.connections[0].readyState;
-        console.log('Connected to MongoDB');
-    } catch (error) {
-        console.error('MongoDB connection error:', error);
+    if (!MONGODB_URI) {
+        console.error('MONGODB_URI is not set. Exiting.');
+        process.exit(1);
+    }
+
+    const options = {
+        // Fail faster when the server is not reachable
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 10000,
+    };
+
+    for (let i = 0; i < retries; i++) {
+        try {
+            await mongoose.connect(MONGODB_URI, options);
+            isConnected = true;
+            console.log('Connected to MongoDB');
+            return;
+        } catch (err) {
+            console.error(`MongoDB connection attempt ${i + 1} failed:`, err.message);
+            if (i < retries - 1) {
+                await new Promise((res) => setTimeout(res, delay));
+                delay *= 2; // exponential backoff
+            } else {
+                console.error('All MongoDB connection attempts failed');
+            }
+        }
     }
 };
 
 // Middleware to ensure DB is connected before handling requests
-app.use(async (req, res, next) => {
-    await connectDB();
+app.use((req, res, next) => {
+    if (!isConnected) {
+        // Try connecting in background (do not block requests for long)
+        connectDB().catch(() => {});
+        return res.status(503).json({ error: 'Service unavailable: database not connected' });
+    }
     next();
 });
 
 // Start Server
 if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
+    // Attempt initial DB connection, but still start the server to avoid blocking deploys.
+    connectDB().finally(() => {
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}` + (isConnected ? '' : ' (DB not connected)'));
+        });
     });
 }
 
