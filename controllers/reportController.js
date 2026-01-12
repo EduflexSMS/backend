@@ -14,9 +14,13 @@ exports.generateMonthlyReport = async (req, res) => {
 
         const monthIndex = parseInt(month);
 
+        // Robust grade matching: handle "Grade 6" vs "Grade 06"
+        const gradeNum = parseInt(grade.replace(/\D/g, ''));
+        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+
         // Find students match grade and have subject enrollment
         const students = await Student.find({
-            grade: grade,
+            grade: { $regex: gradeRegex },
             'enrollments.subject': subject
         });
 
@@ -47,10 +51,10 @@ exports.generateMonthlyReport = async (req, res) => {
                         mobile: student.mobile,
                         fee: record.feePaid ? 'Yes' : 'No',
                         tute: record.tutesGiven ? 'Yes' : 'No',
-                        w1: record.attendance[0] ? 'P' : 'A',
-                        w2: record.attendance[1] ? 'P' : 'A',
-                        w3: record.attendance[2] ? 'P' : 'A',
-                        w4: record.attendance[3] ? 'P' : 'A',
+                        w1: (record.attendance[0] === true || record.attendance[0] === 'present') ? 'P' : (record.attendance[0] === 'absent' ? 'Ab' : 'A'),
+                        w2: (record.attendance[1] === true || record.attendance[1] === 'present') ? 'P' : (record.attendance[1] === 'absent' ? 'Ab' : 'A'),
+                        w3: (record.attendance[2] === true || record.attendance[2] === 'present') ? 'P' : (record.attendance[2] === 'absent' ? 'Ab' : 'A'),
+                        w4: (record.attendance[3] === true || record.attendance[3] === 'present') ? 'P' : (record.attendance[3] === 'absent' ? 'Ab' : 'A'),
                     });
                 }
             }

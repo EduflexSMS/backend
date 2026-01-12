@@ -14,64 +14,62 @@ const MONGODB_URI = process.env.MONGODB_URI;
 app.use(cors());
 app.use(express.json());
 
+// Database Connection Logic
+const connectDB = async () => {
+    // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+    if (mongoose.connection.readyState === 1) {
+        return;
+    }
+
+    if (!MONGODB_URI) {
+        throw new Error('MONGODB_URI is not defined in environment variables');
+    }
+
+    try {
+        await mongoose.connect(MONGODB_URI, {
+            serverSelectionTimeoutMS: 5000,
+            connectTimeoutMS: 10000,
+        });
+        console.log('MongoDB Connected');
+    } catch (error) {
+        console.error('MongoDB Connection Error:', error);
+        throw error;
+    }
+};
+
+// Middleware to ensure DB is connected before handling requests
+app.use(async (req, res, next) => {
+    try {
+        await connectDB();
+        next();
+    } catch (error) {
+        console.error('Database connection failed for request:', error);
+        res.status(503).json({ error: 'Service Unavailable: Database connection failed', details: error.message });
+    }
+});
+
 // Routes
 app.use('/api', studentRoutes);
 app.use('/api', subjectRoutes);
 app.use('/api', dashboardRoutes);
 
-
-// Database Connection
-let isConnected = false;
-
-const connectDB = async (retries = 5, delay = 3000) => {
-    if (isConnected) return;
-    if (!MONGODB_URI) {
-        console.error('MONGODB_URI is not set. Exiting.');
-        process.exit(1);
-    }
-
-    const options = {
-        // Fail faster when the server is not reachable
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 10000,
-    };
-
-    for (let i = 0; i < retries; i++) {
-        try {
-            await mongoose.connect(MONGODB_URI, options);
-            isConnected = true;
-            console.log('Connected to MongoDB');
-            return;
-        } catch (err) {
-            console.error(`MongoDB connection attempt ${i + 1} failed:`, err.message);
-            if (i < retries - 1) {
-                await new Promise((res) => setTimeout(res, delay));
-                delay *= 2; // exponential back off
-            } else {
-                console.error('All MongoDB connection attempts failed');
-            }
-        }
-    }
-};
-
-// Middleware to ensure DB is connected before handling requests
-app.use((req, res, next) => {
-    if (!isConnected) {
-        // Try connecting in background (do not block requests for long)
-        connectDB().catch(() => {});
-        return res.status(503).json({ error: 'Service unavailable: database not connected' });
-    }
-    next();
-});
-
 // Start Server
 if (require.main === module) {
-    // Attempt initial DB connection, but still start the server to avoid blocking deploys.
-    connectDB().finally(() => {
-        app.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}` + (isConnected ? '' : ' (DB not connected)'));
+    connectDB()
+        .then(() => {
+            app.listen(PORT, () => {
+                console.log(`Server running on port ${PORT}`);
+            });
+        })
+        .catch(err => {
+            console.error('Failed to start server:', err);
+            // Even if DB fails, we might want to start server to at least show 503s or health checks,
+            // but for this simple app, logging and exiting or just logging is fine.
+            // We'll try to start anyway so Vercel doesn't kill the process immediately if it expects a bound port.
+            app.listen(PORT, () => {
+                console.log(`Server running on port ${PORT} (DB Connection Failed)`);
+            });
         });
-    });
 }
 
 module.exports = app;

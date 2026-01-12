@@ -49,7 +49,7 @@ exports.getMonthlyReport = async (req, res) => {
             const record = enrollment ? enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex) : null;
 
             if (record) {
-                const attendanceCount = record.attendance.filter(a => a === true).length;
+                const attendanceCount = record.attendance.filter(a => a === true || a === 'present').length;
 
                 // Helper to calculate days
                 const getDays = (monthIdx, year, dayInfo) => {
@@ -144,7 +144,7 @@ function initializeRecords() {
             monthIndex: i,
             feePaid: false,
             tutesGiven: false,
-            attendance: [false, false, false, false, false]
+            attendance: ['pending', 'pending', 'pending', 'pending', 'pending']
         });
     }
     return records;
@@ -263,6 +263,7 @@ exports.updateStudent = async (req, res) => {
 exports.markAttendance = async (req, res) => {
     try {
         const { studentId, subject, month, week } = req.params; // month: 0-11, week: 0-3
+        const { status } = req.body; // Expect 'present', 'absent', or 'pending'
 
         const student = await Student.findById(studentId);
         if (!student) return res.status(404).json({ message: 'Student not found' });
@@ -273,12 +274,20 @@ exports.markAttendance = async (req, res) => {
         const record = enrollment.monthlyRecords.find(r => r.monthIndex === parseInt(month));
         if (!record) return res.status(404).json({ message: 'Month record not found' });
 
-        // if (record.attendance[week] === true) {
-        //     return res.status(400).json({ message: 'Attendance already marked and cannot be reverted' });
-        // }
+        // Update status
+        // If status is provided in body, use it. Otherwise, simple toggle for legacy support (or error)
+        if (status) {
+            record.attendance[week] = status;
+        } else {
+            // Fallback/Legacy toggle: Pending -> Present -> Absent -> Pending (Cycle)
+            const current = record.attendance[week];
+            if (current === 'present' || current === true || current === 'true') record.attendance[week] = 'absent';
+            else if (current === 'absent') record.attendance[week] = 'pending';
+            else record.attendance[week] = 'present';
+        }
 
-        // Toggle status
-        record.attendance[week] = !record.attendance[week];
+        // Ensure atomic update for Mongoose array
+        student.markModified('enrollments');
         await student.save();
 
         res.json(student);
@@ -343,9 +352,13 @@ exports.getClassReport = async (req, res) => {
 
         const monthIndex = parseInt(month);
 
+        // Robust grade matching: handle "Grade 6" vs "Grade 06"
+        const gradeNum = parseInt(grade.replace(/\D/g, ''));
+        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+
         // Find students in the grade who have the subject in enrollments
         const students = await Student.find({
-            grade: grade,
+            grade: { $regex: gradeRegex },
             'enrollments.subject': subject
         });
 

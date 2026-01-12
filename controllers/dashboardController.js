@@ -25,20 +25,28 @@ exports.getDashboardStats = async (req, res) => {
                         $sum: {
                             $cond: [
                                 {
-                                    $eq: [
+                                    $gt: [
                                         {
-                                            $ifNull: [
-                                                { $arrayElemAt: ["$enrollments.monthlyRecords.feePaid", currentMonthIndex] },
-                                                false
-                                            ]
+                                            $size: {
+                                                $filter: {
+                                                    input: "$enrollments.monthlyRecords",
+                                                    as: "record",
+                                                    cond: {
+                                                        $and: [
+                                                            { $eq: ["$$record.monthIndex", currentMonthIndex] },
+                                                            { $eq: ["$$record.feePaid", true] }
+                                                        ]
+                                                    }
+                                                }
+                                            }
                                         },
-                                        true
+                                        0
                                     ]
                                 }, 1, 0
                             ]
                         }
                     },
-                    // Average attendance for the current month (just checking if any week attended)
+                    // Active Attendance (at least one day present in current month)
                     attendedThisMonth: {
                         $sum: {
                             $cond: [
@@ -47,17 +55,18 @@ exports.getDashboardStats = async (req, res) => {
                                         {
                                             $size: {
                                                 $filter: {
-                                                    input: {
-                                                        $ifNull: [
-                                                            { $arrayElemAt: ["$enrollments.monthlyRecords.attendance", currentMonthIndex] },
-                                                            []
+                                                    input: "$enrollments.monthlyRecords",
+                                                    as: "record",
+                                                    cond: {
+                                                        $and: [
+                                                            { $eq: ["$$record.monthIndex", currentMonthIndex] },
+                                                            { $in: ["$$record.attendance", ["present", true, "true"]] } // Check if any present/true
                                                         ]
-                                                    },
-                                                    as: "att",
-                                                    cond: { $eq: ["$$att", true] }
+                                                    }
                                                 }
                                             }
-                                        }, 0
+                                        },
+                                        0
                                     ]
                                 }, 1, 0
                             ]
