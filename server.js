@@ -46,7 +46,7 @@ const connectDB = async (retries = 5, delay = 3000) => {
             console.error(`MongoDB connection attempt ${i + 1} failed:`, err.message);
             if (i < retries - 1) {
                 await new Promise((res) => setTimeout(res, delay));
-                delay *= 2; // exponential backoff
+                delay *= 2; // exponential back off
             } else {
                 console.error('All MongoDB connection attempts failed');
             }
