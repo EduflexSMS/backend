@@ -5,9 +5,8 @@ const recordSchema = new mongoose.Schema({
   feePaid: { type: Boolean, default: false },
   tutesGiven: { type: Boolean, default: false },
   attendance: {
-    type: [Boolean],
-    type: [Boolean],
-    default: [false, false, false, false, false],
+    type: [String],
+    default: ['pending', 'pending', 'pending', 'pending', 'pending'],
     validate: [arrayLimit, '{PATH} exceeds the limit of 5']
   }
 });
