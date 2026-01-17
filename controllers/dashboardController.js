@@ -95,3 +95,60 @@ exports.getDashboardStats = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+exports.getSubjectDetails = async (req, res) => {
+    try {
+        const { subjectName } = req.params;
+        const currentDate = new Date();
+        const currentMonthIndex = currentDate.getMonth();
+
+        const gradeStats = await Student.aggregate([
+            { $match: { "enrollments.subject": subjectName } },
+            { $unwind: "$enrollments" },
+            { $match: { "enrollments.subject": subjectName } }, // Filter again after unwind
+            {
+                $group: {
+                    _id: "$grade",
+                    studentCount: { $sum: 1 },
+                    paidCount: {
+                        $sum: {
+                            $cond: [
+                                {
+                                    $gt: [
+                                        {
+                                            $size: {
+                                                $filter: {
+                                                    input: "$enrollments.monthlyRecords",
+                                                    as: "record",
+                                                    cond: {
+                                                        $and: [
+                                                            { $eq: ["$$record.monthIndex", currentMonthIndex] },
+                                                            { $eq: ["$$record.feePaid", true] }
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        0
+                                    ]
+                                }, 1, 0
+                            ]
+                        }
+                    }
+                }
+            },
+            { $sort: { _id: 1 } } // Sort by grade
+        ]);
+
+        const formattedStats = gradeStats.map(stat => ({
+            grade: stat._id,
+            totalStudents: stat.studentCount,
+            paidStudents: stat.paidCount
+        }));
+
+        res.json(formattedStats);
+    } catch (error) {
+        console.error("Error fetching subject details:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
