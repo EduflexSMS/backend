@@ -100,7 +100,8 @@ exports.getSubjectDetails = async (req, res) => {
     try {
         const { subjectName } = req.params;
         const currentDate = new Date();
-        const currentMonthIndex = currentDate.getMonth();
+        // Use query month if provided, otherwise current month
+        let currentMonthIndex = req.query.month ? parseInt(req.query.month) : currentDate.getMonth();
 
         const gradeStats = await Student.aggregate([
             { $match: { "enrollments.subject": subjectName } },
