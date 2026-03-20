@@ -1,0 +1,37 @@
+--- SUBJECTS DEBUG ---
+Name: Mathematics
+ID: 695a5473405c06a445068ac2
+Schedules: [{"grade":"Grade 07","day":"Tuesday","startDate":"2026-01-06T00:00:00.000Z","_id":"695d240c9adcb8089e64cbc8"},{"grade":"Grade 08","day":"Wednesday","startDate":"2026-01-07T00:00:00.000Z","_id":"695d240c9adcb8089e64cbc9"},{"grade":"Grade 09","day":"Friday","startDate":"2026-01-09T00:00:00.000Z","_id":"695d240c9adcb8089e64cbca"},{"grade":"Grade 10","day":"Thursday","startDate":"2026-01-08T00:00:00.000Z","_id":"695d240c9adcb8089e64cbcb"},{"grade":"Grade 11","day":"Thursday","startDate":"2026-01-08T00:00:00.000Z","_id":"695d240c9adcb8089e64cbcc"}]
+------------------------
+Name: English
+ID: 695a5480405c06a445068acb
+Schedules: []
+------------------------
+Name: ICT
+ID: 695a548c405c06a445068ad6
+Schedules: []
+------------------------
+Name: Science
+ID: 695a549c405c06a445068adf
+Schedules: []
+------------------------
+Name: Grade 03 Scholarship
+ID: 695a54bf405c06a445068ae9
+Schedules: []
+------------------------
+Name: Grade 04 Scholarship
+ID: 695a54d2405c06a445068af2
+Schedules: []
+------------------------
+Name: Grade 05 Scholarship
+ID: 695a54df405c06a445068afb
+Schedules: []
+------------------------
+Name: Business and Accounting Studies
+ID: 695a5592405c06a445068b9c
+Schedules: []
+------------------------
+Name: Business & Accounting Studies
+ID: 6965e00c7a26ab9250868716
+Schedules: []
+------------------------
