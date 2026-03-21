@@ -9,7 +9,7 @@ const app = express();
 // Base middleware
 // Allow cross-origin requests from frontend deployments.
 app.use(cors({
-    origin: ['*'],
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     preflightContinue: false,
