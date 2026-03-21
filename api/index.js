@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const API_URL = "https://edubackend-two.vercel.app";
+const API_URL = "https://eduflexback.vercel.app";
 
 const app = express();
 
