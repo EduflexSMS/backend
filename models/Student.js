@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const recordSchema = new mongoose.Schema({
   monthIndex: { type: Number, required: true }, // 0 for Jan, 11 for Dec
   feePaid: { type: Boolean, default: false },
+  feePaidDate: { type: Date, default: null },
   tutesGiven: { type: Boolean, default: false },
   attendance: {
     type: [String],

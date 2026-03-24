@@ -143,6 +143,7 @@ function initializeRecords() {
         records.push({
             monthIndex: i,
             feePaid: false,
+            feePaidDate: null,
             tutesGiven: false,
             attendance: ['pending', 'pending', 'pending', 'pending', 'pending']
         });
@@ -373,6 +374,11 @@ exports.updateRecordStatus = async (req, res) => {
             // Toggle
             console.log(`Toggling Fee: ${record.feePaid} -> ${!record.feePaid}`);
             record.feePaid = !record.feePaid;
+            if (record.feePaid) {
+                record.feePaidDate = new Date();
+            } else {
+                record.feePaidDate = null;
+            }
         } else if (type === 'tute') {
             // Toggle
             console.log(`Toggling Tute: ${record.tutesGiven} -> ${!record.tutesGiven}`);
@@ -432,6 +438,110 @@ exports.getClassReport = async (req, res) => {
         });
 
         res.json(report);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// GET /reports/daily
+exports.getDailyReport = async (req, res) => {
+    try {
+        const { date, grade, subject } = req.query; // date: YYYY-MM-DD
+        
+        if (!date || !grade || !subject) {
+            return res.status(400).json({ message: 'Date, Grade, and Subject are required' });
+        }
+
+        const reportDate = new Date(date);
+        reportDate.setHours(0, 0, 0, 0);
+
+        const monthIndex = reportDate.getMonth();
+        const currentYear = reportDate.getFullYear();
+
+        // Get Subject Class Day
+        const Subject = require('../models/Subject');
+        const subjectObj = await Subject.findOne({ name: subject });
+
+        let classDayInfo = { day: subjectObj ? subjectObj.classDay : 'Monday', startDate: null };
+        if (subjectObj && subjectObj.gradeSchedules) {
+            const schedule = subjectObj.gradeSchedules.find(s => s.grade === grade);
+            if (schedule) {
+                classDayInfo = { day: schedule.day, startDate: schedule.startDate };
+            }
+        }
+
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const dayIndex = days.indexOf(classDayInfo.day);
+        const start = classDayInfo.startDate ? new Date(classDayInfo.startDate) : null;
+        if (start) start.setHours(0, 0, 0, 0);
+
+        let weekIndex = -1;
+        const tempDate = new Date(currentYear, monthIndex, 1);
+        let count = 0;
+
+        while (tempDate <= reportDate) {
+            if (tempDate.getDay() === dayIndex) {
+                 const currentDate = new Date(tempDate);
+                 currentDate.setHours(0,0,0,0);
+                 if (!start || currentDate >= start) {
+                     count++;
+                 }
+            }
+            tempDate.setDate(tempDate.getDate() + 1);
+        }
+
+        weekIndex = Math.max(0, count - 1);
+
+        const gradeNum = parseInt(grade.replace(/\D/g, ''));
+        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+
+        const students = await Student.find({
+            grade: { $regex: gradeRegex },
+            'enrollments.subject': subject
+        });
+
+        const report = students.map(student => {
+            const enrollment = student.enrollments.find(e => e.subject === subject);
+            const record = enrollment ? enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex) : null;
+
+            let attendanceStatus = 'pending';
+            if (record && record.attendance.length > weekIndex) {
+                attendanceStatus = record.attendance[weekIndex];
+            }
+            
+            let paidToday = false;
+            let feePaidStatus = false;
+            
+            if (record && record.feePaid) {
+                 feePaidStatus = true;
+                 if (record.feePaidDate) {
+                     const pd = new Date(record.feePaidDate);
+                     if (pd.getFullYear() === reportDate.getFullYear() && 
+                         pd.getMonth() === reportDate.getMonth() && 
+                         pd.getDate() === reportDate.getDate()) {
+                         paidToday = true;
+                     }
+                 }
+            }
+
+            return {
+                id: student._id,
+                name: student.name,
+                indexNumber: student.indexNumber,
+                mobile: student.mobile,
+                attendanceToday: attendanceStatus, // 'present', 'absent', 'pending', true, false
+                feePaidStatus: feePaidStatus,
+                paidToday: paidToday, 
+                tutesGiven: record ? record.tutesGiven : false
+            };
+        });
+
+        res.json({
+             reportDate: reportDate,
+             weekIndex: weekIndex,
+             students: report 
+        });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
