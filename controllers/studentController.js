@@ -443,6 +443,50 @@ exports.getClassReport = async (req, res) => {
     }
 };
 
+// GET /reports/grade-report
+exports.getGradeReport = async (req, res) => {
+    try {
+        const { grade, month } = req.query;
+
+        if (!grade || month === undefined) {
+            return res.status(400).json({ message: 'Grade and Month are required' });
+        }
+
+        const monthIndex = parseInt(month);
+        const gradeNum = parseInt(grade.replace(/\D/g, ''));
+        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+
+        const students = await Student.find({ grade: { $regex: gradeRegex } });
+
+        const report = {};
+
+        students.forEach(student => {
+            student.enrollments.forEach(enrollment => {
+                const subject = enrollment.subject;
+                const record = enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex);
+
+                if (!report[subject]) {
+                    report[subject] = [];
+                }
+
+                report[subject].push({
+                    id: student._id,
+                    name: student.name,
+                    indexNumber: student.indexNumber,
+                    mobile: student.mobile,
+                    attendance: record ? record.attendance : [],
+                    feePaid: record ? record.feePaid : false,
+                    tutesGiven: record ? record.tutesGiven : false
+                });
+            });
+        });
+
+        res.json(report);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // GET /reports/daily
 exports.getDailyReport = async (req, res) => {
     try {

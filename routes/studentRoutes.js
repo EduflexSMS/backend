@@ -13,6 +13,7 @@ router.post('/attendance/qr', studentController.markAttendanceQR);
 
 
 router.get('/reports/class-report', studentController.getClassReport);
+router.get('/reports/grade-report', studentController.getGradeReport);
 router.get('/reports/daily', studentController.getDailyReport);
 router.get('/reports/monthly', studentController.getMonthlyReport);
 
