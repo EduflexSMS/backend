@@ -502,22 +502,7 @@ exports.getDailyReport = async (req, res) => {
         const monthIndex = reportDate.getMonth();
         const currentYear = reportDate.getFullYear();
 
-        // Get Subject Class Day
-        const Subject = require('../models/Subject');
-        const subjectObj = await Subject.findOne({ name: subject });
-
-        let classDayInfo = { day: subjectObj ? subjectObj.classDay : 'Monday', startDate: null };
-        if (subjectObj && subjectObj.gradeSchedules) {
-            const schedule = subjectObj.gradeSchedules.find(s => s.grade === grade);
-            if (schedule) {
-                classDayInfo = { day: schedule.day, startDate: schedule.startDate };
-            }
-        }
-
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayIndex = days.indexOf(classDayInfo.day);
-        const start = classDayInfo.startDate ? new Date(classDayInfo.startDate) : null;
-        if (start) start.setHours(0, 0, 0, 0);
+        const dayIndex = reportDate.getDay();
 
         let weekIndex = -1;
         const tempDate = new Date(currentYear, monthIndex, 1);
@@ -525,11 +510,7 @@ exports.getDailyReport = async (req, res) => {
 
         while (tempDate <= reportDate) {
             if (tempDate.getDay() === dayIndex) {
-                 const currentDate = new Date(tempDate);
-                 currentDate.setHours(0,0,0,0);
-                 if (!start || currentDate >= start) {
-                     count++;
-                 }
+                 count++;
             }
             tempDate.setDate(tempDate.getDate() + 1);
         }
