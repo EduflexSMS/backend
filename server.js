@@ -95,6 +95,7 @@ app.use('/api', subjectRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
+app.use('/api/pos', require('./routes/posRoutes'));
 
 // Start Server
 if (require.main === module) {

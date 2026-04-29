@@ -57,6 +57,8 @@ app.use('/api', require('../routes/studentRoutes'));
 app.use('/api', require('../routes/subjectRoutes'));
 app.use('/api', require('../routes/dashboardRoutes'));
 app.use('/api/payments', require('../routes/paymentRoutes'));
+app.use('/api/whatsapp', require('../routes/whatsappRoutes'));
+app.use('/api/pos', require('../routes/posRoutes'));
 
 // Export for Vercel
 module.exports = app;
