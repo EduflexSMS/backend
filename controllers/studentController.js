@@ -624,13 +624,8 @@ exports.markAttendanceQR = async (req, res) => {
             return res.status(500).json({ message: 'Invalid class day configuration' });
         }
 
-        // Strict Check: Is today the class day?
-        if (today.getDay() !== dayIndex) {
-            return res.status(400).json({ message: `Today is not ${classDay}. Class is on ${classDay}.` });
-        }
-
         // Calculate Week Index (Which occurrence of the day is today?)
-        let weekIndex = -1;
+        let weekIndex = 0;
         const tempDate = new Date(currentYear, monthIndex, 1);
         let occurrenceCount = 0;
 
@@ -643,10 +638,13 @@ exports.markAttendanceQR = async (req, res) => {
 
         if (occurrenceCount > 0) {
             weekIndex = occurrenceCount - 1;
+        } else {
+            // If they are marking attendance early in the month, default to week 1 (index 0)
+            weekIndex = 0;
         }
 
-        if (weekIndex === -1 || weekIndex >= 5) {
-            return res.status(400).json({ message: 'Week limit exceeded or invalid date' });
+        if (weekIndex >= 5) {
+            weekIndex = 4; // Limit to maximum 5 weeks (indices 0-4)
         }
 
         // Check if already marked
