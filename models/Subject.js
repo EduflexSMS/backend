@@ -5,8 +5,7 @@ const subjectSchema = new mongoose.Schema({
     description: { type: String },
     classDay: {
         type: String,
-        required: true,
-        enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        default: 'Monday' // Provide a default if other logic relies on it but it's not strictly required from frontend
     },
     gradeSchedules: [{
         grade: { type: String, required: true }, // e.g., 'Grade 07'

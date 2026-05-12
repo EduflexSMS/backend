@@ -11,13 +11,13 @@ exports.getAllSubjects = async (req, res) => {
 
 exports.createSubject = async (req, res) => {
     try {
-        const { name, description, classDay, color, fee } = req.body;
-        if (!name || !classDay) return res.status(400).json({ message: 'Name and Class Day are required' });
+        const { name, description, color, fee } = req.body;
+        if (!name) return res.status(400).json({ message: 'Name is required' });
 
         const existing = await Subject.findOne({ name });
         if (existing) return res.status(400).json({ message: 'Subject already exists' });
 
-        const subject = new Subject({ name, description, classDay, color, fee: fee || 0 });
+        const subject = new Subject({ name, description, color, fee: fee || 0 });
         await subject.save();
         res.status(201).json(subject);
     } catch (error) {
