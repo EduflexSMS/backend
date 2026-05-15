@@ -3,7 +3,7 @@ const router = express.Router();
 const Exam = require('../models/Exam');
 const Subject = require('../models/Subject');
 const Student = require('../models/Student');
-const { protect, adminAuth } = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/authMiddleware');
 
 // Helper to determine grade based on marks
 const calculateGrade = (marks) => {
@@ -15,7 +15,7 @@ const calculateGrade = (marks) => {
 };
 
 // Create a new exam
-router.post('/exams', protect, adminAuth, async (req, res) => {
+router.post('/exams', protect, async (req, res) => {
     try {
         const { title, grade, subject, date } = req.body;
         if (!title || !grade || !subject) {
@@ -65,7 +65,7 @@ router.get('/exams/:id', protect, async (req, res) => {
 });
 
 // Add or Update marks for a student in an exam
-router.put('/exams/:id/marks', protect, adminAuth, async (req, res) => {
+router.put('/exams/:id/marks', protect, async (req, res) => {
     try {
         const { studentId, marks } = req.body;
         const examId = req.params.id;
@@ -104,7 +104,7 @@ router.put('/exams/:id/marks', protect, adminAuth, async (req, res) => {
 });
 
 // Delete an exam
-router.delete('/exams/:id', protect, adminAuth, async (req, res) => {
+router.delete('/exams/:id', protect, async (req, res) => {
     try {
         const exam = await Exam.findByIdAndDelete(req.params.id);
         if (!exam) return res.status(404).json({ error: 'Exam not found' });
