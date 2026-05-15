@@ -3,7 +3,7 @@ const router = express.Router();
 const Exam = require('../models/Exam');
 const Subject = require('../models/Subject');
 const Student = require('../models/Student');
-const { protect } = require('../middleware/authMiddleware');
+// No auth middleware used as per other routes
 
 // Helper to determine grade based on marks
 const calculateGrade = (marks) => {
@@ -14,8 +14,7 @@ const calculateGrade = (marks) => {
     return 'F';
 };
 
-// Create a new exam
-router.post('/exams', protect, async (req, res) => {
+router.post('/exams', async (req, res) => {
     try {
         const { title, grade, subject, date } = req.body;
         if (!title || !grade || !subject) {
@@ -32,7 +31,7 @@ router.post('/exams', protect, async (req, res) => {
 });
 
 // Get all exams (with optional filtering)
-router.get('/exams', protect, async (req, res) => {
+router.get('/exams', async (req, res) => {
     try {
         const { grade, subject } = req.query;
         let query = {};
@@ -50,7 +49,7 @@ router.get('/exams', protect, async (req, res) => {
 });
 
 // Get specific exam with student details
-router.get('/exams/:id', protect, async (req, res) => {
+router.get('/exams/:id', async (req, res) => {
     try {
         const exam = await Exam.findById(req.params.id)
             .populate('subject', 'name')
@@ -65,7 +64,7 @@ router.get('/exams/:id', protect, async (req, res) => {
 });
 
 // Add or Update marks for a student in an exam
-router.put('/exams/:id/marks', protect, async (req, res) => {
+router.put('/exams/:id/marks', async (req, res) => {
     try {
         const { studentId, marks } = req.body;
         const examId = req.params.id;
@@ -104,7 +103,7 @@ router.put('/exams/:id/marks', protect, async (req, res) => {
 });
 
 // Delete an exam
-router.delete('/exams/:id', protect, async (req, res) => {
+router.delete('/exams/:id', async (req, res) => {
     try {
         const exam = await Exam.findByIdAndDelete(req.params.id);
         if (!exam) return res.status(404).json({ error: 'Exam not found' });
