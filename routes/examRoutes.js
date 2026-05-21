@@ -7,10 +7,12 @@ const Student = require('../models/Student');
 
 // Helper to determine grade based on marks
 const calculateGrade = (marks) => {
-    if (marks >= 75) return 'A';
-    if (marks >= 65) return 'B';
-    if (marks >= 55) return 'C';
-    if (marks >= 40) return 'S';
+    if (marks === 'AB' || marks === 'Absent') return 'AB';
+    const num = Number(marks);
+    if (num >= 75) return 'A';
+    if (num >= 65) return 'B';
+    if (num >= 55) return 'C';
+    if (num >= 40) return 'S';
     return 'F';
 };
 
@@ -53,7 +55,7 @@ router.get('/exams/:id', async (req, res) => {
     try {
         const exam = await Exam.findById(req.params.id)
             .populate('subject', 'name')
-            .populate('results.student', 'name rfid uiid grade mobile parentMobile');
+            .populate('results.student', 'name rfid uiid indexNumber grade mobile parentMobile');
         
         if (!exam) return res.status(404).json({ error: 'Exam not found' });
         res.json(exam);
@@ -63,17 +65,26 @@ router.get('/exams/:id', async (req, res) => {
     }
 });
 
-// Add or Update marks for a student in an exam
 router.put('/exams/:id/marks', async (req, res) => {
     try {
         const { studentId, marks } = req.body;
         const examId = req.params.id;
 
-        if (marks < 0 || marks > 100) {
-            return res.status(400).json({ error: 'Marks must be between 0 and 100' });
+        let finalMarks;
+        let grade;
+
+        if (marks === 'AB' || marks === 'Absent') {
+            finalMarks = 'AB';
+            grade = 'AB';
+        } else {
+            const numMarks = Number(marks);
+            if (isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
+                return res.status(400).json({ error: 'Marks must be between 0 and 100 or AB' });
+            }
+            finalMarks = numMarks;
+            grade = calculateGrade(numMarks);
         }
 
-        const grade = calculateGrade(marks);
         const exam = await Exam.findById(examId);
         
         if (!exam) return res.status(404).json({ error: 'Exam not found' });
@@ -82,10 +93,10 @@ router.put('/exams/:id/marks', async (req, res) => {
         const existingResultIndex = exam.results.findIndex(r => r.student.toString() === studentId);
         
         if (existingResultIndex >= 0) {
-            exam.results[existingResultIndex].marks = marks;
+            exam.results[existingResultIndex].marks = finalMarks;
             exam.results[existingResultIndex].grade = grade;
         } else {
-            exam.results.push({ student: studentId, marks, grade });
+            exam.results.push({ student: studentId, marks: finalMarks, grade });
         }
 
         await exam.save();
@@ -93,7 +104,7 @@ router.put('/exams/:id/marks', async (req, res) => {
         // Re-populate to return the updated data
         const updatedExam = await Exam.findById(examId)
             .populate('subject', 'name')
-            .populate('results.student', 'name rfid uiid grade mobile parentMobile');
+            .populate('results.student', 'name rfid uiid indexNumber grade mobile parentMobile');
 
         res.json(updatedExam);
     } catch (error) {

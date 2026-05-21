@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const markSchema = new mongoose.Schema({
     student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
-    marks: { type: Number, required: true, min: 0, max: 100 },
+    marks: { type: mongoose.Schema.Types.Mixed, required: true }, // Can be a Number (0-100) or String "AB"
     grade: { type: String }
 });
 
