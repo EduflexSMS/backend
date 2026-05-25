@@ -104,6 +104,13 @@ if (require.main === module) {
         .then(() => {
             app.listen(PORT, () => {
                 console.log(`Server running on port ${PORT} - v2.1`);
+                // Start background worker for auto-absents
+                try {
+                    const { startAttendanceWorker } = require('./utils/attendanceWorker');
+                    startAttendanceWorker();
+                } catch (workerErr) {
+                    console.error('Failed to start attendance background worker:', workerErr);
+                }
             });
         })
         .catch(err => {

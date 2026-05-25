@@ -311,7 +311,7 @@ exports.deleteStudent = async (req, res) => {
 // PATCH /attendance/:studentId/:subject/:month/:week
 exports.markAttendance = async (req, res) => {
     try {
-        const { studentId, subject, month, week } = req.params; // month: 0-11, week: 0-3
+        const { studentId, subject, month, week } = req.params; // month: 0-11, week: 0-4
         const { status } = req.body; // Expect 'present', 'absent', or 'pending'
 
         const student = await Student.findById(studentId);
@@ -338,6 +338,33 @@ exports.markAttendance = async (req, res) => {
         // Ensure atomic update for Mongoose array
         student.markModified('enrollments');
         await student.save();
+
+        // Register class session if marked present
+        const finalStatus = record.attendance[week];
+        if (finalStatus === 'present') {
+            const ClassSession = require('../models/ClassSession');
+            try {
+                const sessionExists = await ClassSession.findOne({
+                    subject,
+                    grade: student.grade,
+                    monthIndex: parseInt(month),
+                    weekIndex: parseInt(week)
+                });
+
+                if (!sessionExists) {
+                    await ClassSession.create({
+                        subject,
+                        grade: student.grade,
+                        monthIndex: parseInt(month),
+                        weekIndex: parseInt(week),
+                        startTime: new Date()
+                    });
+                    console.log(`[ClassSession] Started session (manual mark) for ${subject} (${student.grade}) - Month ${month}, Week ${parseInt(week) + 1}`);
+                }
+            } catch (sessionErr) {
+                console.error('[ClassSession] Error registering class session:', sessionErr.message);
+            }
+        }
 
         res.json(student);
     } catch (error) {
@@ -574,15 +601,20 @@ exports.getDailyReport = async (req, res) => {
 // POST /attendance/qr/scan
 exports.markAttendanceQR = async (req, res) => {
     try {
-        const { indexNumber, subject } = req.body;
+        const { indexNumber, subject, grade } = req.body;
 
-        if (!indexNumber || !subject) {
-            return res.status(400).json({ message: 'Index Number and Subject are required' });
+        if (!indexNumber || !subject || !grade) {
+            return res.status(400).json({ message: 'Index Number, Subject, and Grade are required' });
         }
 
         const student = await Student.findOne({ indexNumber });
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
+        }
+
+        // Validate Grade strictly
+        if (student.grade !== grade) {
+            return res.status(400).json({ message: `Student is in ${student.grade}, but selected class is for ${grade}` });
         }
 
         const enrollment = student.enrollments.find(e => e.subject === subject);
@@ -601,30 +633,10 @@ exports.markAttendanceQR = async (req, res) => {
             return res.status(404).json({ message: 'Month record not found for this month.' });
         }
 
-        // Get Subject Details for Class Day
-        const Subject = require('../models/Subject');
-        const subjectObj = await Subject.findOne({ name: subject });
+        // Calculate Week Index based on the actual scan day of the week
+        const dayIndex = today.getDay();
 
-        if (!subjectObj) {
-            return res.status(404).json({ message: 'Subject details not found' });
-        }
-
-        let classDay = subjectObj.classDay;
-        if (subjectObj.gradeSchedules) {
-            const schedule = subjectObj.gradeSchedules.find(s => s.grade === student.grade);
-            if (schedule) {
-                classDay = schedule.day;
-            }
-        }
-
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayIndex = days.indexOf(classDay);
-
-        if (dayIndex === -1) {
-            return res.status(500).json({ message: 'Invalid class day configuration' });
-        }
-
-        // Calculate Week Index (Which occurrence of the day is today?)
+        // Calculate Week Index (Which occurrence of today's day of the week is today?)
         let weekIndex = 0;
         const tempDate = new Date(currentYear, monthIndex, 1);
         let occurrenceCount = 0;
@@ -639,7 +651,6 @@ exports.markAttendanceQR = async (req, res) => {
         if (occurrenceCount > 0) {
             weekIndex = occurrenceCount - 1;
         } else {
-            // If they are marking attendance early in the month, default to week 1 (index 0)
             weekIndex = 0;
         }
 
@@ -653,7 +664,8 @@ exports.markAttendanceQR = async (req, res) => {
             return res.status(200).json({
                 message: 'Attendance already marked',
                 student: student.name,
-                status: 'already_marked'
+                status: 'already_marked',
+                week: weekIndex + 1
             });
         }
 
@@ -661,6 +673,30 @@ exports.markAttendanceQR = async (req, res) => {
         record.attendance[weekIndex] = 'present';
         student.markModified('enrollments');
         await student.save();
+
+        // Auto-detect and register the start of this class session
+        const ClassSession = require('../models/ClassSession');
+        try {
+            const sessionExists = await ClassSession.findOne({
+                subject,
+                grade: student.grade,
+                monthIndex,
+                weekIndex
+            });
+
+            if (!sessionExists) {
+                await ClassSession.create({
+                    subject,
+                    grade: student.grade,
+                    monthIndex,
+                    weekIndex,
+                    startTime: new Date()
+                });
+                console.log(`[ClassSession] Started session for ${subject} (${student.grade}) - Month ${monthIndex}, Week ${weekIndex + 1}`);
+            }
+        } catch (sessionErr) {
+            console.error('[ClassSession] Error registering class session:', sessionErr.message);
+        }
 
         res.json({
             message: 'Attendance marked successfully',
