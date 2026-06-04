@@ -172,7 +172,7 @@ exports.registerUser = async (req, res) => {
 // @access  Private (Admin)
 exports.createTeacher = async (req, res) => {
     try {
-        const { username, password, assignedSubject } = req.body;
+        const { username, password, assignedSubject, description, image } = req.body;
 
         if (!username || !password || !assignedSubject) {
             return res.status(400).json({ message: 'Username, password, and assigned subject are required' });
@@ -189,7 +189,9 @@ exports.createTeacher = async (req, res) => {
             username,
             password,
             role: 'teacher',
-            assignedSubject
+            assignedSubject,
+            description: description || '',
+            image: image || ''
         });
 
         if (user) {
@@ -197,11 +199,64 @@ exports.createTeacher = async (req, res) => {
                 _id: user._id,
                 username: user.username,
                 role: user.role,
-                assignedSubject: user.assignedSubject
+                assignedSubject: user.assignedSubject,
+                description: user.description,
+                image: user.image
             });
         } else {
             res.status(400).json({ message: 'Invalid user data' });
         }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Update a teacher account (Admin only)
+// @route   PUT /api/auth/teachers/:id
+// @access  Private (Admin)
+exports.updateTeacher = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { username, password, assignedSubject, description, image } = req.body;
+
+        const teacher = await User.findById(id);
+        if (!teacher || teacher.role !== 'teacher') {
+            return res.status(404).json({ message: 'Teacher not found' });
+        }
+
+        if (username) teacher.username = username;
+        if (assignedSubject) teacher.assignedSubject = assignedSubject;
+        if (description !== undefined) teacher.description = description;
+        if (image !== undefined) teacher.image = image;
+        if (password) {
+            teacher.password = password; // mongoose schema hook handles hashing on save
+        }
+
+        await teacher.save();
+        res.json({
+            _id: teacher._id,
+            username: teacher.username,
+            role: teacher.role,
+            assignedSubject: teacher.assignedSubject,
+            description: teacher.description,
+            image: teacher.image
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Delete a teacher account (Admin only)
+// @route   DELETE /api/auth/teachers/:id
+// @access  Private (Admin)
+exports.deleteTeacher = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const teacher = await User.findOneAndDelete({ _id: id, role: 'teacher' });
+        if (!teacher) {
+            return res.status(404).json({ message: 'Teacher not found' });
+        }
+        res.json({ message: 'Teacher deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -218,3 +273,4 @@ exports.getTeachers = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
