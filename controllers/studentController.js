@@ -410,6 +410,23 @@ exports.updateRecordStatus = async (req, res) => {
             // Toggle
             console.log(`Toggling Tute: ${record.tutesGiven} -> ${!record.tutesGiven}`);
             record.tutesGiven = !record.tutesGiven;
+
+            // Send WhatsApp notification if marked as given
+            if (record.tutesGiven && student.mobile) {
+                const { sendWhatsAppMessage } = require('../utils/whatsappHelper');
+                const msg = `Dear Parent,
+*Eduflex Institute*
+
+Student: *${student.name}*
+Index: *${student.indexNumber}*
+Subject: *${subject}* (Grade ${student.grade})
+
+Has received the Tute for this month.
+Thank you!`;
+                sendWhatsAppMessage(student.mobile, msg).catch(err => {
+                    console.error("[WhatsApp] Error sending tute notification:", err.message);
+                });
+            }
         } else {
             console.log('Invalid type');
             return res.status(400).json({ message: 'Invalid type' });
@@ -673,6 +690,23 @@ exports.markAttendanceQR = async (req, res) => {
         record.attendance[weekIndex] = 'present';
         student.markModified('enrollments');
         await student.save();
+
+        // Send WhatsApp notification
+        if (student.mobile) {
+            const { sendWhatsAppMessage } = require('../utils/whatsappHelper');
+            const msg = `Dear Parent,
+*Eduflex Institute*
+
+Student: *${student.name}*
+Index: *${student.indexNumber}*
+Subject: *${subject}* (Grade ${student.grade})
+
+Has attended the class today.
+Thank you!`;
+            sendWhatsAppMessage(student.mobile, msg).catch(err => {
+                console.error("[WhatsApp] Error sending QR attendance notification:", err.message);
+            });
+        }
 
         // Auto-detect and register the start of this class session
         const ClassSession = require('../models/ClassSession');
