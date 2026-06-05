@@ -342,6 +342,23 @@ exports.markAttendance = async (req, res) => {
         // Register class session if marked present
         const finalStatus = record.attendance[week];
         if (finalStatus === 'present') {
+            // Send WhatsApp notification
+            if (student.mobile) {
+                const { sendWhatsAppMessage } = require('../utils/whatsappHelper');
+                const msg = `Dear Parent,
+*Eduflex Institute*
+
+Student: *${student.name}*
+Index: *${student.indexNumber}*
+Subject: *${subject}* (Grade ${student.grade})
+
+Has attended the class today.
+Thank you!`;
+                sendWhatsAppMessage(student.mobile, msg).catch(err => {
+                    console.error("[WhatsApp] Error sending manual attendance notification:", err.message);
+                });
+            }
+
             const ClassSession = require('../models/ClassSession');
             try {
                 const sessionExists = await ClassSession.findOne({
