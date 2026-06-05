@@ -698,6 +698,8 @@ exports.markAttendanceQR = async (req, res) => {
             return res.status(200).json({
                 message: 'Attendance already marked',
                 student: student.name,
+                indexNumber: student.indexNumber,
+                mobile: student.mobile,
                 status: 'already_marked',
                 week: weekIndex + 1
             });
@@ -753,6 +755,7 @@ Thank you!`;
             message: 'Attendance marked successfully',
             student: student.name,
             indexNumber: student.indexNumber,
+            mobile: student.mobile,
             week: weekIndex + 1,
             status: 'success'
         });
