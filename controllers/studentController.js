@@ -95,7 +95,7 @@ exports.getMonthlyReport = async (req, res) => {
                     name: student.name,
                     mobile: student.mobile,
                     attendance: `${attendanceCount} / ${maxDays}`,
-                    feePaid: record.feePaid ? 'Yes' : 'No',
+                    feePaid: enrollment.isFreeCard ? 'Free Card' : (record.feePaid ? 'Yes' : 'No'),
                     tutesGiven: record.tutesGiven ? 'Yes' : 'No'
                 });
             } else {
@@ -133,7 +133,8 @@ const studentSchema = Joi.object({
     grade: Joi.string().required(), // Replaced school with grade
     mobile: Joi.string().pattern(/^[0-9+\-\s()]+$/).required(),
     indexNumber: Joi.string().optional(), // Auto-generated if not provided
-    subjects: Joi.array().items(Joi.string()).optional() // Initial subjects
+    subjects: Joi.array().items(Joi.string()).optional(), // Initial subjects
+    freeCardSubjects: Joi.array().items(Joi.string()).optional() // Initial free card subjects
 });
 
 // Helper to create 12 monthly records
@@ -221,7 +222,7 @@ exports.createStudent = async (req, res) => {
         const { error } = studentSchema.validate(req.body);
         if (error) return res.status(400).json({ message: error.details[0].message });
 
-        let { indexNumber, subjects } = req.body;
+        let { indexNumber, subjects, freeCardSubjects } = req.body;
 
         if (!indexNumber) {
             // Auto-generate index if not provided (Simplistic approach: Timestamp based or Random)
@@ -234,6 +235,7 @@ exports.createStudent = async (req, res) => {
 
         const enrollments = (subjects || []).map(subject => ({
             subject,
+            isFreeCard: (freeCardSubjects || []).includes(subject),
             monthlyRecords: initializeRecords()
         }));
 
@@ -255,7 +257,7 @@ exports.createStudent = async (req, res) => {
 exports.updateStudent = async (req, res) => {
     try {
         const { id } = req.params;
-        const { subjects, ...updateData } = req.body; // Separate subjects from other data
+        const { subjects, freeCardSubjects, ...updateData } = req.body; // Separate subjects and freeCardSubjects from other data
 
         const student = await Student.findById(id);
         if (!student) return res.status(404).json({ message: 'Student not found' });
@@ -278,10 +280,16 @@ exports.updateStudent = async (req, res) => {
             if (newSubjects.length > 0) {
                 const newEnrollments = newSubjects.map(subject => ({
                     subject,
+                    isFreeCard: (freeCardSubjects || []).includes(subject),
                     monthlyRecords: initializeRecords()
                 }));
                 student.enrollments.push(...newEnrollments);
             }
+
+            // 3. Update isFreeCard status for all enrollments
+            student.enrollments.forEach(enrollment => {
+                enrollment.isFreeCard = (freeCardSubjects || []).includes(enrollment.subject);
+            });
         }
 
         await student.save();
@@ -494,7 +502,8 @@ exports.getClassReport = async (req, res) => {
                 mobile: student.mobile,
                 attendance: record ? record.attendance : [],
                 feePaid: record ? record.feePaid : false,
-                tutesGiven: record ? record.tutesGiven : false
+                tutesGiven: record ? record.tutesGiven : false,
+                isFreeCard: enrollment ? enrollment.isFreeCard : false
             };
         });
 
@@ -537,7 +546,8 @@ exports.getGradeReport = async (req, res) => {
                     mobile: student.mobile,
                     attendance: record ? record.attendance : [],
                     feePaid: record ? record.feePaid : false,
-                    tutesGiven: record ? record.tutesGiven : false
+                    tutesGiven: record ? record.tutesGiven : false,
+                    isFreeCard: enrollment.isFreeCard
                 });
             });
         });
@@ -617,6 +627,7 @@ exports.getDailyReport = async (req, res) => {
                 mobile: student.mobile,
                 attendanceToday: attendanceStatus, // 'present', 'absent', 'pending', true, false
                 feePaidStatus: feePaidStatus,
+                isFreeCard: enrollment ? enrollment.isFreeCard : false,
                 paidToday: paidToday, 
                 tutesGiven: record ? record.tutesGiven : false
             };

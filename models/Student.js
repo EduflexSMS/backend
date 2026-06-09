@@ -18,6 +18,7 @@ function arrayLimit(val) {
 
 const enrollmentSchema = new mongoose.Schema({
   subject: { type: String, required: true },
+  isFreeCard: { type: Boolean, default: false },
   monthlyRecords: [recordSchema]
 });
 

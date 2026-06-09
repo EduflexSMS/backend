@@ -37,6 +37,11 @@ exports.getPaymentStats = async (req, res) => {
         students.forEach(student => {
             const enrollment = student.enrollments.find(e => e.subject === subject.name);
             if (enrollment) {
+                // Skip free-card students for teacher payments
+                if (enrollment.isFreeCard) {
+                    return;
+                }
+
                 // Check monthly records
                 // Assuming monthlyRecord.monthIndex is enough (simple check). 
                 // In a real app we need to check Year too, but current schema only has monthIndex.
@@ -168,6 +173,8 @@ exports.fixFees = async (req, res) => {
             students.forEach(student => {
                 const enrollment = student.enrollments.find(e => e.subject === subject.name);
                 if (enrollment) {
+                    if (enrollment.isFreeCard) return;
+
                     const record = enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex);
                     if (record && record.feePaid) {
                         paidCount++;
