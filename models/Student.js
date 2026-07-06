@@ -9,6 +9,11 @@ const recordSchema = new mongoose.Schema({
     type: [String],
     default: ['pending', 'pending', 'pending', 'pending', 'pending'],
     validate: [arrayLimit, '{PATH} exceeds the limit of 5']
+  },
+  dailyFeesPaid: {
+    type: [Boolean],
+    default: [false, false, false, false, false],
+    validate: [arrayLimit, '{PATH} exceeds the limit of 5']
   }
 });
 

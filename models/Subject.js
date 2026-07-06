@@ -17,7 +17,8 @@ const subjectSchema = new mongoose.Schema({
         startDate: { type: Date } // Optional start date for this grade's schedule
     }],
     color: { type: String, default: '#2196f3' }, // Hex code for UI theme
-    fee: { type: Number, required: true, default: 0 }
+    fee: { type: Number, required: true, default: 0 },
+    feeType: { type: String, enum: ['monthly', 'daily'], default: 'monthly' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Subject', subjectSchema);

@@ -9,6 +9,7 @@ router.put('/students/:id', studentController.updateStudent);
 router.delete('/students/:id', studentController.deleteStudent);
 router.patch('/attendance/:studentId/:subject/:month/:week', studentController.markAttendance);
 router.patch('/records/:studentId/:subject/:month/:type', studentController.updateRecordStatus);
+router.patch('/records/:studentId/:subject/:month/daily-fee/:weekIndex', studentController.toggleDailyFeeStatus);
 router.post('/attendance/qr', studentController.markAttendanceQR);
 
 

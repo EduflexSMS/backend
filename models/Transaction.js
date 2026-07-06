@@ -9,6 +9,8 @@ const transactionSchema = new mongoose.Schema({
         subject: { type: String, required: true },
         month: { type: Number, required: true },
         monthName: { type: String, required: true },
+        weekIndex: { type: Number },
+        weekName: { type: String },
         amount: { type: Number, required: true }
     }],
     totalAmount: { type: Number, required: true },

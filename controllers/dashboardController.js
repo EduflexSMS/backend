@@ -8,83 +8,60 @@ exports.getDashboardStats = async (req, res) => {
         const totalSubjects = await Subject.countDocuments();
         const totalTeachers = await User.countDocuments({ role: 'teacher' });
 
-        // Aggregation: Get counts and status by subject
-        // We want to see how many students are enrolled in each subject
-        // And for each subject, a snapshot of the current month's performance (e.g., current month index)
-
-        // Note: This is a heavy aggregation, simplified for this prototype
         const currentDate = new Date();
         const currentMonthIndex = currentDate.getMonth();
 
-        const subjectStats = await Student.aggregate([
-            { $unwind: "$enrollments" },
-            {
-                $group: {
-                    _id: "$enrollments.subject",
-                    studentCount: { $sum: 1 },
-                    // Count how many paid fees for the current month
-                    paidFeesThisMonth: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $gt: [
-                                        {
-                                            $size: {
-                                                $filter: {
-                                                    input: "$enrollments.monthlyRecords",
-                                                    as: "record",
-                                                    cond: {
-                                                        $and: [
-                                                            { $eq: ["$$record.monthIndex", currentMonthIndex] },
-                                                            { $eq: ["$$record.feePaid", true] }
-                                                        ]
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        0
-                                    ]
-                                }, 1, 0
-                            ]
-                        }
-                    },
-                    // Active Attendance (at least one day present in current month)
-                    attendedThisMonth: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $gt: [
-                                        {
-                                            $size: {
-                                                $filter: {
-                                                    input: "$enrollments.monthlyRecords",
-                                                    as: "record",
-                                                    cond: {
-                                                        $and: [
-                                                            { $eq: ["$$record.monthIndex", currentMonthIndex] },
-                                                            { $in: ["$$record.attendance", ["present", true, "true"]] } // Check if any present/true
-                                                        ]
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        0
-                                    ]
-                                }, 1, 0
-                            ]
+        const subjects = await Subject.find({});
+        const students = await Student.find({});
+
+        const subjectStatsMap = {};
+        subjects.forEach(sub => {
+            subjectStatsMap[sub.name] = {
+                subject: sub.name,
+                studentCount: 0,
+                paidFees: 0,
+                activeAttendance: 0
+            };
+        });
+
+        students.forEach(student => {
+            student.enrollments.forEach(enrollment => {
+                const subStat = subjectStatsMap[enrollment.subject];
+                if (!subStat) return; // Ignore if subject doesn't exist anymore
+
+                subStat.studentCount++;
+
+                const record = enrollment.monthlyRecords.find(r => r.monthIndex === currentMonthIndex);
+                if (record) {
+                    // Check active attendance (at least one day present/true)
+                    const isAttended = record.attendance && record.attendance.some(a => a === 'present' || a === true || a === 'true');
+                    if (isAttended) {
+                        subStat.activeAttendance++;
+                    }
+
+                    // Check paid fees
+                    const subjectObj = subjects.find(s => s.name === enrollment.subject);
+                    const isDailyFee = subjectObj && subjectObj.feeType === 'daily';
+                    
+                    if (enrollment.isFreeCard) {
+                        // Free card student
+                    } else if (isDailyFee) {
+                        const paidDays = record.dailyFeesPaid ? record.dailyFeesPaid.filter(Boolean).length : 0;
+                        // Count fraction of paid classes (approx 4 classes per month on average)
+                        subStat.paidFees += (paidDays / 4);
+                    } else {
+                        if (record.feePaid) {
+                            subStat.paidFees++;
                         }
                     }
                 }
-            }
-        ]);
+            });
+        });
 
-        // Format for frontend
-        // Map _id back to subject details if needed, or just send name
-        const formattedSubjectStats = subjectStats.map(stat => ({
-            subject: stat._id,
-            studentCount: stat.studentCount,
-            paidFees: stat.paidFeesThisMonth,
-            activeAttendance: stat.attendedThisMonth
+        // Round paidFees to nearest integer for presentation
+        const formattedSubjectStats = Object.values(subjectStatsMap).map(stat => ({
+            ...stat,
+            paidFees: Math.round(stat.paidFees)
         }));
 
         res.json({
@@ -103,52 +80,52 @@ exports.getSubjectDetails = async (req, res) => {
     try {
         const { subjectName } = req.params;
         const currentDate = new Date();
-        // Use query month if provided, otherwise current month
         let currentMonthIndex = req.query.month ? parseInt(req.query.month) : currentDate.getMonth();
 
-        const gradeStats = await Student.aggregate([
-            { $match: { "enrollments.subject": subjectName } },
-            { $unwind: "$enrollments" },
-            { $match: { "enrollments.subject": subjectName } }, // Filter again after unwind
-            {
-                $group: {
-                    _id: "$grade",
-                    studentCount: { $sum: 1 },
-                    paidCount: {
-                        $sum: {
-                            $cond: [
-                                {
-                                    $gt: [
-                                        {
-                                            $size: {
-                                                $filter: {
-                                                    input: "$enrollments.monthlyRecords",
-                                                    as: "record",
-                                                    cond: {
-                                                        $and: [
-                                                            { $eq: ["$$record.monthIndex", currentMonthIndex] },
-                                                            { $eq: ["$$record.feePaid", true] }
-                                                        ]
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        0
-                                    ]
-                                }, 1, 0
-                            ]
-                        }
-                    }
-                }
-            },
-            { $sort: { _id: 1 } } // Sort by grade
-        ]);
+        const subjectObj = await Subject.findOne({ name: subjectName });
+        const isDailyFee = subjectObj && subjectObj.feeType === 'daily';
+        const fee = subjectObj ? subjectObj.fee : 0;
 
-        const formattedStats = gradeStats.map(stat => ({
-            grade: stat._id,
-            totalStudents: stat.studentCount,
-            paidStudents: stat.paidCount
-        }));
+        const students = await Student.find({ "enrollments.subject": subjectName });
+
+        // Group by grade
+        const gradeMap = {};
+
+        students.forEach(student => {
+            const enrollment = student.enrollments.find(e => e.subject === subjectName);
+            if (!enrollment) return;
+
+            const record = enrollment.monthlyRecords.find(r => r.monthIndex === currentMonthIndex);
+            
+            const grade = student.grade;
+            if (!gradeMap[grade]) {
+                gradeMap[grade] = {
+                    grade,
+                    totalStudents: 0,
+                    paidStudents: 0,
+                    collectedAmount: 0
+                };
+            }
+
+            gradeMap[grade].totalStudents++;
+
+            if (enrollment.isFreeCard) {
+                return;
+            }
+
+            if (isDailyFee) {
+                const paidDays = (record && record.dailyFeesPaid) ? record.dailyFeesPaid.filter(Boolean).length : 0;
+                gradeMap[grade].collectedAmount += paidDays * fee;
+                gradeMap[grade].paidStudents += paidDays;
+            } else {
+                if (record && record.feePaid) {
+                    gradeMap[grade].paidStudents++;
+                    gradeMap[grade].collectedAmount += fee;
+                }
+            }
+        });
+
+        const formattedStats = Object.values(gradeMap).sort((a, b) => a.grade.localeCompare(b.grade));
 
         res.json(formattedStats);
     } catch (error) {

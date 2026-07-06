@@ -21,7 +21,9 @@ async function checkAndMarkAbsents() {
             console.log(`[AttendanceWorker] Processing: ${subject} (${grade}) - Month ${monthIndex}, Week ${weekIndex + 1}`);
 
             const gradeNum = parseInt(grade.replace(/\D/g, ''));
-            const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+            const gradeRegex = isNaN(gradeNum)
+                ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
+                : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
 
             // Find all students in this grade who are enrolled in this subject
             const students = await Student.find({

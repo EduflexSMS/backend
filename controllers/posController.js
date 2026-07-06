@@ -21,8 +21,15 @@ exports.processCheckout = async (req, res) => {
             if (enrollment) {
                 const record = enrollment.monthlyRecords.find(r => r.monthIndex === item.month);
                 if (record) {
-                    record.feePaid = true;
-                    record.feePaidDate = new Date();
+                    if (item.weekIndex !== undefined) {
+                        if (!record.dailyFeesPaid) {
+                            record.dailyFeesPaid = [false, false, false, false, false];
+                        }
+                        record.dailyFeesPaid[item.weekIndex] = true;
+                    } else {
+                        record.feePaid = true;
+                        record.feePaidDate = new Date();
+                    }
                 }
             }
         });
@@ -54,7 +61,8 @@ exports.processCheckout = async (req, res) => {
         waMessage += `*Date:* ${new Date().toLocaleDateString()}\n\n`;
         waMessage += `*Paid Subjects:*\n`;
         items.forEach(item => {
-            waMessage += `- ${item.subject} (${item.monthName}): Rs. ${item.amount}\n`;
+            const weekText = item.weekName ? ` - ${item.weekName}` : '';
+            waMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
         });
         waMessage += `\n*Total Paid: Rs. ${totalAmount.toFixed(2)}*\n---------------------------------\n`;
         waMessage += `Thank you!\nEduflex Institute\nContact: +94789232752`;

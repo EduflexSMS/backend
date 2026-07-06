@@ -90,12 +90,14 @@ exports.getMonthlyReport = async (req, res) => {
                 // subjectObj is fetched at the top of the function now
                 const maxDays = subjectObj ? getDays(monthIndex, currentYear, classDayInfo) : 5;
 
+                const paidDays = record.dailyFeesPaid ? record.dailyFeesPaid.filter(Boolean).length : 0;
+
                 worksheet.addRow({
                     indexNumber: student.indexNumber,
                     name: student.name,
                     mobile: student.mobile,
                     attendance: `${attendanceCount} / ${maxDays}`,
-                    feePaid: enrollment.isFreeCard ? 'Free Card' : (record.feePaid ? 'Yes' : 'No'),
+                    feePaid: enrollment.isFreeCard ? 'Free Card' : (subjectObj && subjectObj.feeType === 'daily' ? `${paidDays} paid` : (record.feePaid ? 'Yes' : 'No')),
                     tutesGiven: record.tutesGiven ? 'Yes' : 'No'
                 });
             } else {
@@ -160,6 +162,9 @@ exports.getGrades = async (req, res) => {
         grades.sort((a, b) => {
             const numA = parseInt(a.replace(/\D/g, '')) || 0;
             const numB = parseInt(b.replace(/\D/g, '')) || 0;
+            if (numA === 0 && numB !== 0) return 1;
+            if (numB === 0 && numA !== 0) return -1;
+            if (numA === 0 && numB === 0) return a.localeCompare(b);
             return numA - numB;
         });
         res.json(grades);
@@ -479,9 +484,11 @@ exports.getClassReport = async (req, res) => {
 
         const monthIndex = parseInt(month);
 
-        // Robust grade matching: handle "Grade 6" vs "Grade 06"
+        // Robust grade matching: handle "Grade 6" vs "Grade 06", and custom class names
         const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const gradeRegex = isNaN(gradeNum)
+            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
+            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
 
         // Find students in the grade who have the subject in enrollments
         const students = await Student.find({
@@ -524,7 +531,9 @@ exports.getGradeReport = async (req, res) => {
 
         const monthIndex = parseInt(month);
         const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const gradeRegex = isNaN(gradeNum)
+            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
+            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
 
         const students = await Student.find({ grade: { $regex: gradeRegex } });
 
@@ -589,7 +598,13 @@ exports.getDailyReport = async (req, res) => {
         weekIndex = Math.max(0, count - 1);
 
         const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const gradeRegex = isNaN(gradeNum)
+            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
+            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+
+        const Subject = require('../models/Subject');
+        const subjectObj = await Subject.findOne({ name: subject });
+        const isDailyFee = subjectObj && subjectObj.feeType === 'daily';
 
         const students = await Student.find({
             grade: { $regex: gradeRegex },
@@ -608,16 +623,23 @@ exports.getDailyReport = async (req, res) => {
             let paidToday = false;
             let feePaidStatus = false;
             
-            if (record && record.feePaid) {
-                 feePaidStatus = true;
-                 if (record.feePaidDate) {
-                     const pd = new Date(record.feePaidDate);
-                     if (pd.getFullYear() === reportDate.getFullYear() && 
-                         pd.getMonth() === reportDate.getMonth() && 
-                         pd.getDate() === reportDate.getDate()) {
-                         paidToday = true;
+            if (isDailyFee) {
+                if (record && record.dailyFeesPaid && record.dailyFeesPaid[weekIndex]) {
+                    feePaidStatus = true;
+                    paidToday = true;
+                }
+            } else {
+                if (record && record.feePaid) {
+                     feePaidStatus = true;
+                     if (record.feePaidDate) {
+                         const pd = new Date(record.feePaidDate);
+                         if (pd.getFullYear() === reportDate.getFullYear() && 
+                             pd.getMonth() === reportDate.getMonth() && 
+                             pd.getDate() === reportDate.getDate()) {
+                             paidToday = true;
+                         }
                      }
-                 }
+                }
             }
 
             return {
@@ -773,6 +795,34 @@ Thank you!`;
 
     } catch (error) {
         console.error("QR Scan Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.toggleDailyFeeStatus = async (req, res) => {
+    try {
+        const { studentId, subject, month, weekIndex } = req.params;
+        const wIdx = parseInt(weekIndex);
+        
+        const student = await Student.findById(studentId);
+        if (!student) return res.status(404).json({ message: 'Student not found' });
+        
+        const enrollment = student.enrollments.find(e => e.subject === subject);
+        if (!enrollment) return res.status(404).json({ message: 'Subject enrollment not found' });
+        
+        const record = enrollment.monthlyRecords.find(r => r.monthIndex === parseInt(month));
+        if (!record) return res.status(404).json({ message: 'Month record not found' });
+        
+        if (!record.dailyFeesPaid) {
+            record.dailyFeesPaid = [false, false, false, false, false];
+        }
+        
+        record.dailyFeesPaid[wIdx] = !record.dailyFeesPaid[wIdx];
+        student.markModified('enrollments');
+        await student.save();
+        
+        res.json({ message: 'Daily fee status updated', dailyFeesPaid: record.dailyFeesPaid });
+    } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };

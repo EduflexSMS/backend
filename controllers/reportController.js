@@ -14,9 +14,15 @@ exports.generateMonthlyReport = async (req, res) => {
 
         const monthIndex = parseInt(month);
 
-        // Robust grade matching: handle "Grade 6" vs "Grade 06"
+        const Subject = require('../models/Subject');
+        const subjectObj = await Subject.findOne({ name: subject });
+        const isDailyFee = subjectObj && subjectObj.feeType === 'daily';
+
+        // Robust grade matching: handle "Grade 6" vs "Grade 06", and custom class names
         const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const gradeRegex = isNaN(gradeNum)
+            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
+            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
 
         // Find students match grade and have subject enrollment
         const students = await Student.find({
@@ -45,11 +51,19 @@ exports.generateMonthlyReport = async (req, res) => {
             if (enrollment) {
                 const record = enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex);
                 if (record) {
+                    let feeStatus = record.feePaid ? 'Yes' : 'No';
+                    if (enrollment.isFreeCard) {
+                        feeStatus = 'Free Card';
+                    } else if (isDailyFee) {
+                        const paidDays = record.dailyFeesPaid ? record.dailyFeesPaid.filter(Boolean).length : 0;
+                        feeStatus = `${paidDays} paid`;
+                    }
+
                     worksheet.addRow({
                         index: student.indexNumber,
                         name: student.name,
                         mobile: student.mobile,
-                        fee: record.feePaid ? 'Yes' : 'No',
+                        fee: feeStatus,
                         tute: record.tutesGiven ? 'Yes' : 'No',
                         w1: (record.attendance[0] === true || record.attendance[0] === 'present') ? 'P' : (record.attendance[0] === 'absent' ? 'Ab' : 'A'),
                         w2: (record.attendance[1] === true || record.attendance[1] === 'present') ? 'P' : (record.attendance[1] === 'absent' ? 'Ab' : 'A'),

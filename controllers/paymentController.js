@@ -33,6 +33,7 @@ exports.getPaymentStats = async (req, res) => {
         const students = await Student.find({ "enrollments.subject": subject.name });
 
         let paidCount = 0;
+        let totalCollected = 0;
 
         students.forEach(student => {
             const enrollment = student.enrollments.find(e => e.subject === subject.name);
@@ -42,20 +43,23 @@ exports.getPaymentStats = async (req, res) => {
                     return;
                 }
 
-                // Check monthly records
-                // Assuming monthlyRecord.monthIndex is enough (simple check). 
-                // In a real app we need to check Year too, but current schema only has monthIndex.
-                // For this request, I will assume the current implementation implies current year or reset yearly.
-                // However, the prompt asks for "Month". I will stick to monthIndex check as per existing code patterns.
-
                 const record = enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex);
-                if (record && record.feePaid) {
-                    paidCount++;
+                if (record) {
+                    if (subject.feeType === 'daily') {
+                        const paidDays = record.dailyFeesPaid ? record.dailyFeesPaid.filter(Boolean).length : 0;
+                        totalCollected += paidDays * (subject.fee || 0);
+                        if (paidDays > 0) {
+                            paidCount++;
+                        }
+                    } else {
+                        if (record.feePaid) {
+                            paidCount++;
+                            totalCollected += (subject.fee || 0);
+                        }
+                    }
                 }
             }
         });
-
-        const totalCollected = paidCount * (subject.fee || 0);
 
         // 2. Check if a payment has already been made to the teacher for this month
         const existingPayment = await TeacherPayment.findOne({
@@ -169,20 +173,25 @@ exports.fixFees = async (req, res) => {
 
             // Re-fetch students to get current count
             const students = await Student.find({ "enrollments.subject": subject.name });
-            let paidCount = 0;
+            let correctTotal = 0;
             students.forEach(student => {
                 const enrollment = student.enrollments.find(e => e.subject === subject.name);
                 if (enrollment) {
                     if (enrollment.isFreeCard) return;
 
                     const record = enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex);
-                    if (record && record.feePaid) {
-                        paidCount++;
+                    if (record) {
+                        if (subject.feeType === 'daily') {
+                            const paidDays = record.dailyFeesPaid ? record.dailyFeesPaid.filter(Boolean).length : 0;
+                            correctTotal += paidDays * subject.fee;
+                        } else {
+                            if (record.feePaid) {
+                                correctTotal += subject.fee;
+                            }
+                        }
                     }
                 }
             });
-
-            const correctTotal = paidCount * subject.fee;
 
             if (Math.abs(payment.totalCollected - correctTotal) > 1) {
                 const oldTotal = payment.totalCollected;
