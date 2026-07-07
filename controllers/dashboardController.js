@@ -47,8 +47,8 @@ exports.getDashboardStats = async (req, res) => {
                         // Free card student
                     } else if (isDailyFee) {
                         const paidDays = record.dailyFeesPaid ? record.dailyFeesPaid.filter(Boolean).length : 0;
-                        // Count fraction of paid classes (approx 4 classes per month on average)
-                        subStat.paidFees += (paidDays / 4);
+                        const classDaysCount = subjectObj?.classDaysCount || 5;
+                        subStat.paidFees += (paidDays / classDaysCount);
                     } else {
                         if (record.feePaid) {
                             subStat.paidFees++;

@@ -16,23 +16,41 @@ exports.processCheckout = async (req, res) => {
         }
 
         // 1. Update Student's feePaid statuses
-        items.forEach(item => {
+        const Subject = require('../models/Subject');
+        for (const item of items) {
             const enrollment = student.enrollments.find(e => e.subject === item.subject);
             if (enrollment) {
                 const record = enrollment.monthlyRecords.find(r => r.monthIndex === item.month);
                 if (record) {
                     if (item.weekIndex !== undefined) {
-                        if (!record.dailyFeesPaid) {
-                            record.dailyFeesPaid = [false, false, false, false, false];
+                        const subjectObj = await Subject.findOne({ name: item.subject });
+                        const classDaysCount = subjectObj?.classDaysCount || 5;
+
+                        if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
+                            record.dailyFeesPaid = Array(classDaysCount).fill(false);
+                        } else if (record.dailyFeesPaid.length < classDaysCount) {
+                            while (record.dailyFeesPaid.length < classDaysCount) {
+                                record.dailyFeesPaid.push(false);
+                            }
                         }
                         record.dailyFeesPaid[item.weekIndex] = true;
+
+                        // Auto-mark attendance as present when payment is checked out
+                        if (!record.attendance || record.attendance.length === 0) {
+                            record.attendance = Array(classDaysCount).fill('pending');
+                        } else if (record.attendance.length < classDaysCount) {
+                            while (record.attendance.length < classDaysCount) {
+                                record.attendance.push('pending');
+                            }
+                        }
+                        record.attendance[item.weekIndex] = 'present';
                     } else {
                         record.feePaid = true;
                         record.feePaidDate = new Date();
                     }
                 }
             }
-        });
+        }
 
         // Ensure Mongoose detects the nested array update
         student.markModified('enrollments');

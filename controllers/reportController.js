@@ -33,18 +33,21 @@ exports.generateMonthlyReport = async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet(`${subject} - Grade ${grade} - ${months[monthIndex]}`);
 
+        const classDaysCount = subjectObj?.classDaysCount || 5;
+
         // Columns
-        worksheet.columns = [
+        const columns = [
             { header: 'Index Number', key: 'index', width: 15 },
             { header: 'Name', key: 'name', width: 25 },
             { header: 'Mobile', key: 'mobile', width: 15 },
             { header: 'Fee Paid', key: 'fee', width: 10 },
-            { header: 'Tutes Given', key: 'tute', width: 12 },
-            { header: 'Week 1', key: 'w1', width: 10 },
-            { header: 'Week 2', key: 'w2', width: 10 },
-            { header: 'Week 3', key: 'w3', width: 10 },
-            { header: 'Week 4', key: 'w4', width: 10 },
+            { header: 'Tutes Given', key: 'tute', width: 12 }
         ];
+
+        for (let i = 0; i < classDaysCount; i++) {
+            columns.push({ header: `Day ${i + 1}`, key: `d${i + 1}`, width: 10 });
+        }
+        worksheet.columns = columns;
 
         students.forEach(student => {
             const enrollment = student.enrollments.find(e => e.subject === subject);
@@ -59,17 +62,19 @@ exports.generateMonthlyReport = async (req, res) => {
                         feeStatus = `${paidDays} paid`;
                     }
 
-                    worksheet.addRow({
+                    const rowData = {
                         index: student.indexNumber,
                         name: student.name,
                         mobile: student.mobile,
                         fee: feeStatus,
-                        tute: record.tutesGiven ? 'Yes' : 'No',
-                        w1: (record.attendance[0] === true || record.attendance[0] === 'present') ? 'P' : (record.attendance[0] === 'absent' ? 'Ab' : 'A'),
-                        w2: (record.attendance[1] === true || record.attendance[1] === 'present') ? 'P' : (record.attendance[1] === 'absent' ? 'Ab' : 'A'),
-                        w3: (record.attendance[2] === true || record.attendance[2] === 'present') ? 'P' : (record.attendance[2] === 'absent' ? 'Ab' : 'A'),
-                        w4: (record.attendance[3] === true || record.attendance[3] === 'present') ? 'P' : (record.attendance[3] === 'absent' ? 'Ab' : 'A'),
-                    });
+                        tute: record.tutesGiven ? 'Yes' : 'No'
+                    };
+
+                    for (let i = 0; i < classDaysCount; i++) {
+                        const status = record.attendance[i];
+                        rowData[`d${i + 1}`] = (status === true || status === 'present') ? 'P' : (status === 'absent' ? 'Ab' : 'A');
+                    }
+                    worksheet.addRow(rowData);
                 }
             }
         });

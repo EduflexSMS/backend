@@ -12,13 +12,20 @@ exports.getAllSubjects = async (req, res) => {
 
 exports.createSubject = async (req, res) => {
     try {
-        const { name, description, color, fee, feeType, teacherName, teacherDescription, teacherImage } = req.body;
+        const { name, description, color, fee, feeType, classDaysCount, teacherName, teacherDescription, teacherImage } = req.body;
         if (!name) return res.status(400).json({ message: 'Name is required' });
 
         const existing = await Subject.findOne({ name });
         if (existing) return res.status(400).json({ message: 'Subject already exists' });
 
-        const subject = new Subject({ name, description, color, fee: fee || 0, feeType: feeType || 'monthly' });
+        const subject = new Subject({ 
+            name, 
+            description, 
+            color, 
+            fee: fee || 0, 
+            feeType: feeType || 'monthly',
+            classDaysCount: classDaysCount || 5
+        });
         await subject.save();
 
         // Create or update teacher if teacherName is provided

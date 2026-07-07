@@ -7,18 +7,18 @@ const recordSchema = new mongoose.Schema({
   tutesGiven: { type: Boolean, default: false },
   attendance: {
     type: [String],
-    default: ['pending', 'pending', 'pending', 'pending', 'pending'],
-    validate: [arrayLimit, '{PATH} exceeds the limit of 5']
+    default: [],
+    validate: [arrayLimit, '{PATH} exceeds the limit of 31']
   },
   dailyFeesPaid: {
     type: [Boolean],
-    default: [false, false, false, false, false],
-    validate: [arrayLimit, '{PATH} exceeds the limit of 5']
+    default: [],
+    validate: [arrayLimit, '{PATH} exceeds the limit of 31']
   }
 });
 
 function arrayLimit(val) {
-  return val.length <= 5;
+  return val.length <= 31;
 }
 
 const enrollmentSchema = new mongoose.Schema({
