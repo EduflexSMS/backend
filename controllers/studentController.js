@@ -672,26 +672,36 @@ exports.getDailyReport = async (req, res) => {
             'enrollments.subject': subject
         });
 
-        const report = students.map(student => {
+        const reportPromises = students.map(async student => {
             const enrollment = student.enrollments.find(e => e.subject === subject);
             const record = enrollment ? enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex) : null;
+            let wasModified = false;
 
             if (record) {
                 // Dynamic Self-Healing
                 if (!record.attendance || record.attendance.length === 0) {
                     record.attendance = Array(classDaysCount).fill('pending');
+                    wasModified = true;
                 } else if (record.attendance.length < classDaysCount) {
                     while (record.attendance.length < classDaysCount) {
                         record.attendance.push('pending');
                     }
+                    wasModified = true;
                 }
                 if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
                     record.dailyFeesPaid = Array(classDaysCount).fill(false);
+                    wasModified = true;
                 } else if (record.dailyFeesPaid.length < classDaysCount) {
                     while (record.dailyFeesPaid.length < classDaysCount) {
                         record.dailyFeesPaid.push(false);
                     }
+                    wasModified = true;
                 }
+            }
+
+            if (wasModified) {
+                student.markModified('enrollments');
+                await student.save();
             }
 
             let attendanceStatus = 'pending';
@@ -733,6 +743,8 @@ exports.getDailyReport = async (req, res) => {
                 tutesGiven: record ? record.tutesGiven : false
             };
         });
+
+        const report = await Promise.all(reportPromises);
 
         res.json({
              reportDate: reportDate,
