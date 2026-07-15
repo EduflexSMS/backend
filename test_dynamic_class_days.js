@@ -5,6 +5,7 @@ const Student = require('./models/Student');
 const Transaction = require('./models/Transaction');
 const { getDailyReport, toggleDailyFeeStatus, markAttendanceQR } = require('./controllers/studentController');
 const { processCheckout } = require('./controllers/posController');
+const { getClassDaysCountForMonth } = require('./utils/calendarHelper');
 
 async function runTests() {
     console.log("=== Eduflex Dynamic Class Days & Fee Configuration Tests ===");
@@ -89,10 +90,11 @@ async function runTests() {
         console.log(`- Attendance array length: ${monthRecord.attendance.length}`);
         console.log(`- Daily fees paid array length: ${monthRecord.dailyFeesPaid.length}`);
         
-        if (monthRecord.attendance.length === 8 && monthRecord.dailyFeesPaid.length === 8) {
-            console.log("✅ Success: Arrays correctly initialized to 8 slots.\n");
+        const expectedCount = getClassDaysCountForMonth(subject, TEST_GRADE, new Date().getFullYear(), currentMonthIdx);
+        if (monthRecord.attendance.length === expectedCount && monthRecord.dailyFeesPaid.length === expectedCount) {
+            console.log(`✅ Success: Arrays correctly initialized to ${expectedCount} slots.\n`);
         } else {
-            throw new Error(`Failure: Expected array length 8, got attendance: ${monthRecord.attendance.length}, dailyFeesPaid: ${monthRecord.dailyFeesPaid.length}`);
+            throw new Error(`Failure: Expected array length ${expectedCount}, got attendance: ${monthRecord.attendance.length}, dailyFeesPaid: ${monthRecord.dailyFeesPaid.length}`);
         }
 
         // --- TEST 3: SELF-HEALING ARRAYS ---
@@ -137,10 +139,10 @@ async function runTests() {
         console.log(`- After getDailyReport call: Attendance length is ${record.attendance.length}`);
         console.log(`- After getDailyReport call: Daily fees paid length is ${record.dailyFeesPaid.length}`);
         
-        if (record.attendance.length === 8 && record.dailyFeesPaid.length === 8) {
-            console.log("✅ Success: Self-healing expanded arrays to 8 correctly.\n");
+        if (record.attendance.length === expectedCount && record.dailyFeesPaid.length === expectedCount) {
+            console.log(`✅ Success: Self-healing expanded arrays to ${expectedCount} correctly.\n`);
         } else {
-            throw new Error(`Failure: Self-healing did not expand arrays to 8. Lengths: attendance=${record.attendance.length}, dailyFeesPaid=${record.dailyFeesPaid.length}`);
+            throw new Error(`Failure: Self-healing did not expand arrays to ${expectedCount}. Lengths: attendance=${record.attendance.length}, dailyFeesPaid=${record.dailyFeesPaid.length}`);
         }
 
         // --- TEST 4: TOGGLE DAILY FEE STATUS ---
@@ -181,7 +183,7 @@ async function runTests() {
 
         // --- TEST 5: POS CHECKOUT FOR DYNAMIC FEE ---
         console.log("5. Testing processCheckout (POS) for dynamic fee session...");
-        // Let's checkout slot 4 (index 4) for this subject
+        // Let's checkout slot 3 (index 3) for this subject
         const mockReqCheckout = {
             body: {
                 studentId: student._id.toString(),
@@ -189,8 +191,8 @@ async function runTests() {
                     subject: TEST_SUBJECT_NAME,
                     month: currentMonthIdx,
                     monthName: "July",
-                    weekIndex: 4,
-                    weekName: "Day 5",
+                    weekIndex: 3,
+                    weekName: "Day 4",
                     amount: 1000
                 }],
                 totalAmount: 1000
@@ -222,13 +224,13 @@ async function runTests() {
         student = await Student.findOne({ indexNumber: TEST_STUDENT_INDEX });
         record = student.enrollments[0].monthlyRecords.find(r => r.monthIndex === currentMonthIdx);
 
-        console.log(`- Slot 4 dailyFeesPaid status after checkout: ${record.dailyFeesPaid[4]}`);
-        console.log(`- Slot 4 attendance status after checkout: ${record.attendance[4]}`);
+        console.log(`- Slot 3 dailyFeesPaid status after checkout: ${record.dailyFeesPaid[3]}`);
+        console.log(`- Slot 3 attendance status after checkout: ${record.attendance[3]}`);
 
-        if (record.dailyFeesPaid[4] === true && record.attendance[4] === 'present') {
+        if (record.dailyFeesPaid[3] === true && record.attendance[3] === 'present') {
             console.log("✅ Success: POS checkout successfully marked the daily fee slot and updated attendance.\n");
         } else {
-            throw new Error(`Failure: POS checkout failed to update student record. paid: ${record.dailyFeesPaid[4]}, attendance: ${record.attendance[4]}`);
+            throw new Error(`Failure: POS checkout failed to update student record. paid: ${record.dailyFeesPaid[3]}, attendance: ${record.attendance[3]}`);
         }
 
         // --- TEST 6: DOCKING QR MARK ATTENDANCE ---

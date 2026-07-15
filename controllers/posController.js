@@ -1,6 +1,7 @@
 const Transaction = require('../models/Transaction');
 const Student = require('../models/Student');
 const axios = require('axios');
+const { getClassDaysCountForMonth } = require('../utils/calendarHelper');
 
 exports.processCheckout = async (req, res) => {
     try {
@@ -24,12 +25,13 @@ exports.processCheckout = async (req, res) => {
                 if (record) {
                     if (item.weekIndex !== undefined) {
                         const subjectObj = await Subject.findOne({ name: item.subject });
-                        const classDaysCount = subjectObj?.classDaysCount || 5;
+                        const currentYear = new Date().getFullYear();
+                        const actualClassDaysCount = getClassDaysCountForMonth(subjectObj, student.grade, currentYear, item.month);
 
                         if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
-                            record.dailyFeesPaid = Array(classDaysCount).fill(false);
-                        } else if (record.dailyFeesPaid.length < classDaysCount) {
-                            while (record.dailyFeesPaid.length < classDaysCount) {
+                            record.dailyFeesPaid = Array(actualClassDaysCount).fill(false);
+                        } else if (record.dailyFeesPaid.length < actualClassDaysCount) {
+                            while (record.dailyFeesPaid.length < actualClassDaysCount) {
                                 record.dailyFeesPaid.push(false);
                             }
                         }
@@ -37,9 +39,9 @@ exports.processCheckout = async (req, res) => {
 
                         // Auto-mark attendance as present when payment is checked out
                         if (!record.attendance || record.attendance.length === 0) {
-                            record.attendance = Array(classDaysCount).fill('pending');
-                        } else if (record.attendance.length < classDaysCount) {
-                            while (record.attendance.length < classDaysCount) {
+                            record.attendance = Array(actualClassDaysCount).fill('pending');
+                        } else if (record.attendance.length < actualClassDaysCount) {
+                            while (record.attendance.length < actualClassDaysCount) {
                                 record.attendance.push('pending');
                             }
                         }

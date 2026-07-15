@@ -1,6 +1,7 @@
 const Student = require('../models/Student');
 const Joi = require('joi');
 const ExcelJS = require('exceljs');
+const { getClassDaysCountForMonth } = require('../utils/calendarHelper');
 
 // ... existing code ...
 
@@ -159,6 +160,23 @@ function initializeRecords(classDaysCount = 5) {
     return records;
 }
 
+// Helper to create 12 monthly records dynamically based on actual calendar days
+function initializeRecordsDynamic(subjectObj, grade, year = new Date().getFullYear()) {
+    const records = [];
+    for (let i = 0; i < 12; i++) {
+        const classDaysCount = getClassDaysCountForMonth(subjectObj, grade, year, i);
+        records.push({
+            monthIndex: i,
+            feePaid: false,
+            feePaidDate: null,
+            tutesGiven: false,
+            attendance: Array(classDaysCount).fill('pending'),
+            dailyFeesPaid: Array(classDaysCount).fill(false)
+        });
+    }
+    return records;
+}
+
 // GET /students/grades
 exports.getGrades = async (req, res) => {
     try {
@@ -243,24 +261,18 @@ exports.createStudent = async (req, res) => {
         const existing = await Student.findOne({ indexNumber });
         if (existing) return res.status(400).json({ message: 'Index Number must be unique' });
 
-        const getSubjectClassDaysMap = async (subjectNames) => {
-            if (!subjectNames || subjectNames.length === 0) return {};
-            const Subject = require('../models/Subject');
-            const subjects = await Subject.find({ name: { $in: subjectNames } });
-            const map = {};
-            subjects.forEach(s => {
-                map[s.name] = s.classDaysCount || 5;
-            });
-            return map;
-        };
+        const Subject = require('../models/Subject');
+        const subjectObjs = await Subject.find({ name: { $in: subjects || [] } });
+        const currentYear = new Date().getFullYear();
 
-        const subjectMap = await getSubjectClassDaysMap(subjects || []);
-
-        const enrollments = (subjects || []).map(subject => ({
-            subject,
-            isFreeCard: (freeCardSubjects || []).includes(subject),
-            monthlyRecords: initializeRecords(subjectMap[subject] || 5)
-        }));
+        const enrollments = (subjects || []).map(subjName => {
+            const subjectObj = subjectObjs.find(s => s.name === subjName);
+            return {
+                subject: subjName,
+                isFreeCard: (freeCardSubjects || []).includes(subjName),
+                monthlyRecords: initializeRecordsDynamic(subjectObj, req.body.grade, currentYear)
+            };
+        });
 
         const student = new Student({
             ...req.body,
@@ -301,23 +313,18 @@ exports.updateStudent = async (req, res) => {
             const newSubjects = subjects.filter(sub => !existingSubjects.includes(sub));
 
             if (newSubjects.length > 0) {
-                const getSubjectClassDaysMap = async (subjectNames) => {
-                    if (!subjectNames || subjectNames.length === 0) return {};
-                    const Subject = require('../models/Subject');
-                    const subjects = await Subject.find({ name: { $in: subjectNames } });
-                    const map = {};
-                    subjects.forEach(s => {
-                        map[s.name] = s.classDaysCount || 5;
-                    });
-                    return map;
-                };
-                const newSubjectMap = await getSubjectClassDaysMap(newSubjects);
+                const Subject = require('../models/Subject');
+                const newSubjectObjs = await Subject.find({ name: { $in: newSubjects } });
+                const currentYear = new Date().getFullYear();
 
-                const newEnrollments = newSubjects.map(subject => ({
-                    subject,
-                    isFreeCard: (freeCardSubjects || []).includes(subject),
-                    monthlyRecords: initializeRecords(newSubjectMap[subject] || 5)
-                }));
+                const newEnrollments = newSubjects.map(subjName => {
+                    const subjectObj = newSubjectObjs.find(s => s.name === subjName);
+                    return {
+                        subject: subjName,
+                        isFreeCard: (freeCardSubjects || []).includes(subjName),
+                        monthlyRecords: initializeRecordsDynamic(subjectObj, student.grade, currentYear)
+                    };
+                });
                 student.enrollments.push(...newEnrollments);
             }
 
@@ -365,6 +372,26 @@ exports.markAttendance = async (req, res) => {
 
         const record = enrollment.monthlyRecords.find(r => r.monthIndex === parseInt(month));
         if (!record) return res.status(404).json({ message: 'Month record not found' });
+
+        const Subject = require('../models/Subject');
+        const subjectObj = await Subject.findOne({ name: subject });
+        const currentYear = new Date().getFullYear();
+        const actualClassDaysCount = getClassDaysCountForMonth(subjectObj, student.grade, currentYear, parseInt(month));
+
+        if (!record.attendance || record.attendance.length === 0) {
+            record.attendance = Array(actualClassDaysCount).fill('pending');
+        } else if (record.attendance.length < actualClassDaysCount) {
+            while (record.attendance.length < actualClassDaysCount) {
+                record.attendance.push('pending');
+            }
+        }
+        if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
+            record.dailyFeesPaid = Array(actualClassDaysCount).fill(false);
+        } else if (record.dailyFeesPaid.length < actualClassDaysCount) {
+            while (record.dailyFeesPaid.length < actualClassDaysCount) {
+                record.dailyFeesPaid.push(false);
+            }
+        }
 
         // Update status
         // If status is provided in body, use it. Otherwise, simple toggle for legacy support (or error)
@@ -615,6 +642,7 @@ exports.getDailyReport = async (req, res) => {
         const Subject = require('../models/Subject');
         const subjectObj = await Subject.findOne({ name: subject });
         const classDaysCount = subjectObj?.classDaysCount || 5;
+        const actualClassDaysCountForGrade = getClassDaysCountForMonth(subjectObj, grade, currentYear, monthIndex);
 
         // Calculate session index for the report date based on scheduled weekdays
         const schedules = subjectObj?.gradeSchedules?.filter(s => s.grade === grade) || [];
@@ -656,8 +684,8 @@ exports.getDailyReport = async (req, res) => {
             weekIndex = Math.max(0, count - 1);
         }
 
-        if (weekIndex >= classDaysCount) {
-            weekIndex = classDaysCount - 1;
+        if (weekIndex >= actualClassDaysCountForGrade) {
+            weekIndex = actualClassDaysCountForGrade - 1;
         }
 
         const gradeNum = parseInt(grade.replace(/\D/g, ''));
@@ -678,21 +706,22 @@ exports.getDailyReport = async (req, res) => {
             let wasModified = false;
 
             if (record) {
+                const actualClassDaysCount = getClassDaysCountForMonth(subjectObj, student.grade, currentYear, monthIndex);
                 // Dynamic Self-Healing
                 if (!record.attendance || record.attendance.length === 0) {
-                    record.attendance = Array(classDaysCount).fill('pending');
+                    record.attendance = Array(actualClassDaysCount).fill('pending');
                     wasModified = true;
-                } else if (record.attendance.length < classDaysCount) {
-                    while (record.attendance.length < classDaysCount) {
+                } else if (record.attendance.length < actualClassDaysCount) {
+                    while (record.attendance.length < actualClassDaysCount) {
                         record.attendance.push('pending');
                     }
                     wasModified = true;
                 }
                 if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
-                    record.dailyFeesPaid = Array(classDaysCount).fill(false);
+                    record.dailyFeesPaid = Array(actualClassDaysCount).fill(false);
                     wasModified = true;
-                } else if (record.dailyFeesPaid.length < classDaysCount) {
-                    while (record.dailyFeesPaid.length < classDaysCount) {
+                } else if (record.dailyFeesPaid.length < actualClassDaysCount) {
+                    while (record.dailyFeesPaid.length < actualClassDaysCount) {
                         record.dailyFeesPaid.push(false);
                     }
                     wasModified = true;
@@ -793,20 +822,20 @@ exports.markAttendanceQR = async (req, res) => {
 
         const Subject = require('../models/Subject');
         const subjectObj = await Subject.findOne({ name: subject });
-        const classDaysCount = subjectObj?.classDaysCount || 5;
+        const actualClassDaysCount = getClassDaysCountForMonth(subjectObj, student.grade, currentYear, monthIndex);
 
         // Dynamic Self-Healing
         if (!record.attendance || record.attendance.length === 0) {
-            record.attendance = Array(classDaysCount).fill('pending');
-        } else if (record.attendance.length < classDaysCount) {
-            while (record.attendance.length < classDaysCount) {
+            record.attendance = Array(actualClassDaysCount).fill('pending');
+        } else if (record.attendance.length < actualClassDaysCount) {
+            while (record.attendance.length < actualClassDaysCount) {
                 record.attendance.push('pending');
             }
         }
         if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
-            record.dailyFeesPaid = Array(classDaysCount).fill(false);
-        } else if (record.dailyFeesPaid.length < classDaysCount) {
-            while (record.dailyFeesPaid.length < classDaysCount) {
+            record.dailyFeesPaid = Array(actualClassDaysCount).fill(false);
+        } else if (record.dailyFeesPaid.length < actualClassDaysCount) {
+            while (record.dailyFeesPaid.length < actualClassDaysCount) {
                 record.dailyFeesPaid.push(false);
             }
         }
@@ -854,8 +883,8 @@ exports.markAttendanceQR = async (req, res) => {
             }
         }
 
-        if (weekIndex >= classDaysCount) {
-            weekIndex = classDaysCount - 1;
+        if (weekIndex >= actualClassDaysCount) {
+            weekIndex = actualClassDaysCount - 1;
         }
 
         // Check if already marked
@@ -948,12 +977,13 @@ exports.toggleDailyFeeStatus = async (req, res) => {
         
         const Subject = require('../models/Subject');
         const subjectObj = await Subject.findOne({ name: subject });
-        const classDaysCount = subjectObj?.classDaysCount || 5;
+        const currentYear = new Date().getFullYear();
+        const actualClassDaysCount = getClassDaysCountForMonth(subjectObj, student.grade, currentYear, parseInt(month));
 
         if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
-            record.dailyFeesPaid = Array(classDaysCount).fill(false);
-        } else if (record.dailyFeesPaid.length < classDaysCount) {
-            while (record.dailyFeesPaid.length < classDaysCount) {
+            record.dailyFeesPaid = Array(actualClassDaysCount).fill(false);
+        } else if (record.dailyFeesPaid.length < actualClassDaysCount) {
+            while (record.dailyFeesPaid.length < actualClassDaysCount) {
                 record.dailyFeesPaid.push(false);
             }
         }
@@ -963,13 +993,38 @@ exports.toggleDailyFeeStatus = async (req, res) => {
         // Auto-mark attendance as present when daily fee is toggled to paid
         if (record.dailyFeesPaid[wIdx]) {
             if (!record.attendance || record.attendance.length === 0) {
-                record.attendance = Array(classDaysCount).fill('pending');
-            } else if (record.attendance.length < classDaysCount) {
-                while (record.attendance.length < classDaysCount) {
+                record.attendance = Array(actualClassDaysCount).fill('pending');
+            } else if (record.attendance.length < actualClassDaysCount) {
+                while (record.attendance.length < actualClassDaysCount) {
                     record.attendance.push('pending');
                 }
             }
             record.attendance[wIdx] = 'present';
+
+            // Send WhatsApp notification when fee is marked paid
+            if (student.mobile) {
+                const { sendWhatsAppMessage } = require('../utils/whatsappHelper');
+                const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                const monthName = monthNames[parseInt(month)];
+                const feeAmount = subjectObj?.fee || 0;
+                
+                const msg = `Dear Parent,
+*Eduflex Institute*
+
+Student: *${student.name}*
+Index: *${student.indexNumber}*
+Subject: *${subject}* (Grade ${student.grade})
+
+*Day Fee Paid Successfully*
+Month: *${monthName}*
+Session: *Day ${wIdx + 1}*
+Amount: *Rs. ${feeAmount.toFixed(2)}*
+
+Thank you!`;
+                sendWhatsAppMessage(student.mobile, msg).catch(err => {
+                    console.error("[WhatsApp] Error sending daily fee toggle notification:", err.message);
+                });
+            }
         }
         
         student.markModified('enrollments');
