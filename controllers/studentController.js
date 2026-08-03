@@ -533,7 +533,7 @@ Thank you!`;
 // GET /reports/class-report
 exports.getClassReport = async (req, res) => {
     try {
-        const { grade, subject, month } = req.query; // month is 0-11 index
+        const { grade, subject, month, excludeFreeCard } = req.query; // month is 0-11 index
 
         if (!grade || !subject || month === undefined) {
             return res.status(400).json({ message: 'Grade, Subject and Month are required' });
@@ -553,7 +553,7 @@ exports.getClassReport = async (req, res) => {
             'enrollments.subject': subject
         });
 
-        const report = students.map(student => {
+        let report = students.map(student => {
             const enrollment = student.enrollments.find(e => e.subject === subject);
             // Initialize Default Record if not found (or just return nulls)
             // Ideally records are initialized on creation, but for safety:
@@ -571,6 +571,10 @@ exports.getClassReport = async (req, res) => {
             };
         });
 
+        if (excludeFreeCard === 'true' || excludeFreeCard === true) {
+            report = report.filter(s => !s.isFreeCard);
+        }
+
         res.json(report);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -580,7 +584,7 @@ exports.getClassReport = async (req, res) => {
 // GET /reports/grade-report
 exports.getGradeReport = async (req, res) => {
     try {
-        const { grade, month } = req.query;
+        const { grade, month, excludeFreeCard } = req.query;
 
         if (!grade || month === undefined) {
             return res.status(400).json({ message: 'Grade and Month are required' });
@@ -618,6 +622,12 @@ exports.getGradeReport = async (req, res) => {
             });
         });
 
+        if (excludeFreeCard === 'true' || excludeFreeCard === true) {
+            Object.keys(report).forEach(sub => {
+                report[sub] = report[sub].filter(s => !s.isFreeCard);
+            });
+        }
+
         res.json(report);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -627,7 +637,7 @@ exports.getGradeReport = async (req, res) => {
 // GET /reports/daily
 exports.getDailyReport = async (req, res) => {
     try {
-        const { date, grade, subject } = req.query; // date: YYYY-MM-DD
+        const { date, grade, subject, excludeFreeCard } = req.query; // date: YYYY-MM-DD
         
         if (!date || !grade || !subject) {
             return res.status(400).json({ message: 'Date, Grade, and Subject are required' });
@@ -773,7 +783,11 @@ exports.getDailyReport = async (req, res) => {
             };
         });
 
-        const report = await Promise.all(reportPromises);
+        let report = await Promise.all(reportPromises);
+
+        if (excludeFreeCard === 'true' || excludeFreeCard === true) {
+            report = report.filter(s => !s.isFreeCard);
+        }
 
         res.json({
              reportDate: reportDate,

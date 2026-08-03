@@ -6,7 +6,7 @@ const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 exports.generateMonthlyReport = async (req, res) => {
     try {
-        const { subject, grade, month } = req.query; // month is 0-11
+        const { subject, grade, month, excludeFreeCard } = req.query; // month is 0-11
 
         if (!subject || !grade || month === undefined) {
             return res.status(400).json({ message: 'Subject, Grade and Month are required' });
@@ -25,10 +25,17 @@ exports.generateMonthlyReport = async (req, res) => {
             : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
 
         // Find students match grade and have subject enrollment
-        const students = await Student.find({
+        let students = await Student.find({
             grade: { $regex: gradeRegex },
             'enrollments.subject': subject
         });
+
+        if (excludeFreeCard === 'true' || excludeFreeCard === true) {
+            students = students.filter(student => {
+                const enrollment = student.enrollments.find(e => e.subject === subject);
+                return enrollment && !enrollment.isFreeCard;
+            });
+        }
 
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet(`${subject} - Grade ${grade} - ${months[monthIndex]}`);
@@ -52,6 +59,9 @@ exports.generateMonthlyReport = async (req, res) => {
         students.forEach(student => {
             const enrollment = student.enrollments.find(e => e.subject === subject);
             if (enrollment) {
+                if ((excludeFreeCard === 'true' || excludeFreeCard === true) && enrollment.isFreeCard) {
+                    return;
+                }
                 const record = enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex);
                 if (record) {
                     let feeStatus = record.feePaid ? 'Yes' : 'No';
