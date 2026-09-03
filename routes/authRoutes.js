@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { loginUser, registerUser, createTeacher, getTeachers, seedTeachers, updateTeacher, deleteTeacher } = require('../controllers/authController');
+const { getTeacherPortalData } = require('../controllers/teacherController');
 
 router.get('/seed-teachers', seedTeachers);
+router.get('/teacher-portal', getTeacherPortalData);
 
 router.post('/login', loginUser);
 router.post('/register', registerUser);
