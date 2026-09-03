@@ -113,6 +113,28 @@ router.put('/exams/:id/marks', async (req, res) => {
     }
 });
 
+// Update exam details (title, date, grade, subject)
+router.put('/exams/:id', async (req, res) => {
+    try {
+        const { title, date, grade, subject } = req.body;
+        const updateData = {};
+        if (title !== undefined) updateData.title = title;
+        if (date !== undefined) updateData.date = date;
+        if (grade !== undefined) updateData.grade = grade;
+        if (subject !== undefined) updateData.subject = subject;
+
+        const updatedExam = await Exam.findByIdAndUpdate(req.params.id, updateData, { new: true })
+            .populate('subject', 'name')
+            .populate('results.student', 'name rfid uiid indexNumber grade mobile parentMobile');
+
+        if (!updatedExam) return res.status(404).json({ error: 'Exam not found' });
+        res.json(updatedExam);
+    } catch (error) {
+        console.error('Error updating exam details:', error);
+        res.status(500).json({ error: 'Failed to update exam details' });
+    }
+});
+
 // Delete an exam
 router.delete('/exams/:id', async (req, res) => {
     try {

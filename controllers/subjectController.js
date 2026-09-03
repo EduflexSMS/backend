@@ -1,5 +1,6 @@
 const Subject = require('../models/Subject');
 const User = require('../models/User');
+const Student = require('../models/Student');
 
 exports.getAllSubjects = async (req, res) => {
     try {
@@ -57,23 +58,85 @@ exports.createSubject = async (req, res) => {
 exports.updateSubject = async (req, res) => {
     try {
         const { subjectName } = req.params;
-        const updates = req.body;
+        const { name, description, color, fee, feeType, classDaysCount, gradeSchedules, teacherName, teacherDescription, teacherImage } = req.body;
 
-        const subject = await Subject.findOneAndUpdate({ name: subjectName }, updates, { new: true });
+        const updateData = {};
+        if (name !== undefined) updateData.name = name;
+        if (description !== undefined) updateData.description = description;
+        if (color !== undefined) updateData.color = color;
+        if (fee !== undefined) updateData.fee = fee;
+        if (feeType !== undefined) updateData.feeType = feeType;
+        if (classDaysCount !== undefined) updateData.classDaysCount = classDaysCount;
+        if (gradeSchedules !== undefined) updateData.gradeSchedules = gradeSchedules;
+
+        const subject = await Subject.findOneAndUpdate({ name: subjectName }, updateData, { new: true });
 
         if (!subject) {
             return res.status(404).json({ message: 'Subject not found' });
         }
 
-        // Cascade rename assignedSubject for teachers
-        if (updates.name && updates.name !== subjectName) {
+        // Cascade rename assignedSubject for teachers and student enrollments
+        if (name && name !== subjectName) {
             await User.updateMany(
                 { role: 'teacher', assignedSubject: subjectName },
-                { assignedSubject: updates.name }
+                { assignedSubject: name }
+            );
+
+            await Student.updateMany(
+                { "enrollments.subject": subjectName },
+                { "$set": { "enrollments.$[elem].subject": name } },
+                { arrayFilters: [{ "elem.subject": subjectName }] }
             );
         }
 
+        // Update teacher if teacherName is provided
+        if (teacherName) {
+            const userExists = await User.findOne({ username: teacherName });
+            if (!userExists) {
+                await User.create({
+                    username: teacherName,
+                    password: 'password',
+                    role: 'teacher',
+                    assignedSubject: subject.name,
+                    description: teacherDescription || '',
+                    image: teacherImage || ''
+                });
+            } else {
+                userExists.assignedSubject = subject.name;
+                if (teacherDescription !== undefined) userExists.description = teacherDescription;
+                if (teacherImage !== undefined) userExists.image = teacherImage;
+                await userExists.save();
+            }
+        }
+
         res.json(subject);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+exports.deleteSubject = async (req, res) => {
+    try {
+        const { subjectName } = req.params;
+        const subject = await Subject.findOneAndDelete({ name: subjectName });
+
+        if (!subject) {
+            return res.status(404).json({ message: 'Subject not found' });
+        }
+
+        // Unlink teachers
+        await User.updateMany(
+            { role: 'teacher', assignedSubject: subjectName },
+            { $unset: { assignedSubject: "" } }
+        );
+
+        // Remove enrollments from students
+        await Student.updateMany(
+            {},
+            { $pull: { enrollments: { subject: subjectName } } }
+        );
+
+        res.json({ message: 'Subject deleted successfully', subjectName });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
