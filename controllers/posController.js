@@ -113,10 +113,34 @@ exports.processCheckout = async (req, res) => {
              }
         }
 
+        // 4. Send Normal SMS Receipt via Android Phone (Hutch SIM)
+        let smsStatus = 'skipped';
+        let smsMessage = `Eduflex Receipt:\nStudent: ${student.name} (${student.indexNumber})\nReceipt: ${transactionId}\n`;
+        items.forEach(item => {
+            const weekText = item.weekName ? ` - ${item.weekName}` : '';
+            smsMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
+        });
+        smsMessage += `Total: Rs. ${totalAmount.toLocaleString()}\nDate: ${new Date().toLocaleDateString()}\nThank you! Eduflex`;
+
+        if (student.mobile) {
+            try {
+                const { sendSMS } = require('../utils/smsHelper');
+                const smsResult = await sendSMS(student.mobile, smsMessage);
+                smsStatus = smsResult.status || (smsResult.success ? 'sent' : 'failed');
+            } catch (smsErr) {
+                console.error("SMS sending error during checkout:", smsErr.message);
+                smsStatus = 'failed';
+            }
+        }
+
         res.status(200).json({
             message: 'Checkout successful',
             transaction,
-            waStatus
+            waStatus,
+            smsStatus,
+            smsMessage,
+            waMessage,
+            studentMobile: student.mobile
         });
 
     } catch (error) {

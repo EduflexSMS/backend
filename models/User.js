@@ -7,7 +7,8 @@ const userSchema = new mongoose.Schema({
     role: { type: String, default: 'admin' },
     assignedSubject: { type: String }, // For teachers
     image: { type: String }, // URL or path to image
-    description: { type: String } // Teacher qualifications/bio
+    description: { type: String }, // Teacher qualifications/bio
+    plainPassword: { type: String } // Plaintext credential readable by admin
 }, { timestamps: true });
 
 // Hash password before saving

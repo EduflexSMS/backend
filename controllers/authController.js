@@ -188,6 +188,7 @@ exports.createTeacher = async (req, res) => {
         const user = await User.create({
             username,
             password,
+            plainPassword: password,
             role: 'teacher',
             assignedSubject,
             description: description || '',
@@ -201,7 +202,8 @@ exports.createTeacher = async (req, res) => {
                 role: user.role,
                 assignedSubject: user.assignedSubject,
                 description: user.description,
-                image: user.image
+                image: user.image,
+                plainPassword: user.plainPassword || password
             });
         } else {
             res.status(400).json({ message: 'Invalid user data' });
@@ -230,6 +232,7 @@ exports.updateTeacher = async (req, res) => {
         if (image !== undefined) teacher.image = image;
         if (password) {
             teacher.password = password; // mongoose schema hook handles hashing on save
+            teacher.plainPassword = password;
         }
 
         await teacher.save();
@@ -239,7 +242,8 @@ exports.updateTeacher = async (req, res) => {
             role: teacher.role,
             assignedSubject: teacher.assignedSubject,
             description: teacher.description,
-            image: teacher.image
+            image: teacher.image,
+            plainPassword: teacher.plainPassword || password
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -268,7 +272,12 @@ exports.deleteTeacher = async (req, res) => {
 exports.getTeachers = async (req, res) => {
     try {
         const teachers = await User.find({ role: 'teacher' }).select('-password');
-        res.json(teachers);
+        const formattedTeachers = teachers.map(t => {
+            const obj = t.toObject();
+            if (!obj.plainPassword) obj.plainPassword = 'password';
+            return obj;
+        });
+        res.json(formattedTeachers);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
