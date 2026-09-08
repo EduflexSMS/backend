@@ -73,24 +73,59 @@ exports.processCheckout = async (req, res) => {
 
         await transaction.save();
 
-        // 3. Prepare WhatsApp Message
-        let waMessage = `✅ *Payment Receipt - Eduflex*\n---------------------------------\n`;
-        waMessage += `*Name:* ${student.name}\n`;
-        waMessage += `*Index:* ${student.indexNumber}\n`;
-        waMessage += `*Receipt No:* ${transactionId}\n`;
-        waMessage += `*Date:* ${new Date().toLocaleDateString()}\n\n`;
-        waMessage += `*Paid Subjects:*\n`;
-        items.forEach(item => {
-            const weekText = item.weekName ? ` - ${item.weekName}` : '';
-            waMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
-        });
-        waMessage += `\n*Total Paid: Rs. ${totalAmount.toFixed(2)}*\n---------------------------------\n`;
-        waMessage += `Thank you!\nEduflex Institute\nContact: +94789232752`;
+        // 3. Prepare WhatsApp & SMS Message (Sinhala or English)
+        let waMessage = '';
+        let smsMessage = '';
 
-        // We return the message so the frontend can send it via the ultramsg API endpoint
-        // This is better than doing it here directly because the frontend might want to handle the loading state or fallback
-        // However, since we want it "automatic", we can also do it directly here. But let's do it here directly for robust backend fulfillment.
-        
+        if (req.body.customMessage) {
+            smsMessage = req.body.customMessage;
+            waMessage = req.body.customMessage;
+        } else if (req.body.language === 'si') {
+            const sinhalaMonths = ["ජනවාරි", "පෙබරවාරි", "මාර්තු", "අප්‍රේල්", "මැයි", "ජූනි", "ජූලි", "අගෝස්තු", "සැප්තැම්බර්", "ඔක්තෝබර්", "නොවැම්බර්", "දෙසැම්බර්"];
+            smsMessage = `Eduflex පන්ති ගාස්තු ලදුපත:\nසිසුවා: ${student.name} (${student.indexNumber})\nඅංකය: ${transactionId}\n`;
+            items.forEach(item => {
+                const sMonth = item.month !== undefined && sinhalaMonths[item.month] ? sinhalaMonths[item.month] : item.monthName;
+                const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                smsMessage += `- ${item.subject} (${sMonth}${weekText}): රු. ${item.amount}\n`;
+            });
+            smsMessage += `මුළු මුදල: රු. ${totalAmount.toLocaleString()}\nදිනය: ${new Date().toLocaleDateString()}\nස්තූතියි! Eduflex Institute`;
+
+            waMessage = `✅ *පන්ති ගාස්තු ලදුපත - Eduflex*\n---------------------------------\n`;
+            waMessage += `*සිසුවා:* ${student.name}\n`;
+            waMessage += `*Index:* ${student.indexNumber}\n`;
+            waMessage += `*ලදුපත් අංකය:* ${transactionId}\n`;
+            waMessage += `*දිනය:* ${new Date().toLocaleDateString()}\n\n`;
+            waMessage += `*ගෙවූ විෂයන්:*\n`;
+            items.forEach(item => {
+                const sMonth = item.month !== undefined && sinhalaMonths[item.month] ? sinhalaMonths[item.month] : item.monthName;
+                const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                waMessage += `- ${item.subject} (${sMonth}${weekText}): රු. ${item.amount}\n`;
+            });
+            waMessage += `\n*මුළු මුදල: රු. ${totalAmount.toFixed(2)}*\n---------------------------------\n`;
+            waMessage += `ස්තූතියි!\nEduflex Institute\nදුරකථන: +94789232752`;
+        } else {
+            smsMessage = `Eduflex Receipt:\nStudent: ${student.name} (${student.indexNumber})\nReceipt: ${transactionId}\n`;
+            items.forEach(item => {
+                const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                smsMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
+            });
+            smsMessage += `Total: Rs. ${totalAmount.toLocaleString()}\nDate: ${new Date().toLocaleDateString()}\nThank you! Eduflex`;
+
+            waMessage = `✅ *Payment Receipt - Eduflex*\n---------------------------------\n`;
+            waMessage += `*Name:* ${student.name}\n`;
+            waMessage += `*Index:* ${student.indexNumber}\n`;
+            waMessage += `*Receipt No:* ${transactionId}\n`;
+            waMessage += `*Date:* ${new Date().toLocaleDateString()}\n\n`;
+            waMessage += `*Paid Subjects:*\n`;
+            items.forEach(item => {
+                const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                waMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
+            });
+            waMessage += `\n*Total Paid: Rs. ${totalAmount.toFixed(2)}*\n---------------------------------\n`;
+            waMessage += `Thank you!\nEduflex Institute\nContact: +94789232752`;
+        }
+
+        // Send WhatsApp if Ultramsg configured
         const instanceId = process.env.ULTRAMSG_INSTANCE_ID;
         const token = process.env.ULTRAMSG_TOKEN;
         
@@ -115,12 +150,6 @@ exports.processCheckout = async (req, res) => {
 
         // 4. Send Normal SMS Receipt via Android Phone (Hutch SIM)
         let smsStatus = 'skipped';
-        let smsMessage = `Eduflex Receipt:\nStudent: ${student.name} (${student.indexNumber})\nReceipt: ${transactionId}\n`;
-        items.forEach(item => {
-            const weekText = item.weekName ? ` - ${item.weekName}` : '';
-            smsMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
-        });
-        smsMessage += `Total: Rs. ${totalAmount.toLocaleString()}\nDate: ${new Date().toLocaleDateString()}\nThank you! Eduflex`;
 
         if (student.mobile) {
             try {
@@ -136,6 +165,7 @@ exports.processCheckout = async (req, res) => {
         res.status(200).json({
             message: 'Checkout successful',
             transaction,
+            student,
             waStatus,
             smsStatus,
             smsMessage,
