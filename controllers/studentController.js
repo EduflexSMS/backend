@@ -966,6 +966,8 @@ Thank you!`;
             indexNumber: student.indexNumber,
             mobile: student.mobile,
             week: weekIndex + 1,
+            feePaid: Boolean(record.feePaid || enrollment.isFreeCard),
+            isFreeCard: Boolean(enrollment.isFreeCard),
             status: 'success'
         });
 

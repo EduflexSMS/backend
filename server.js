@@ -27,7 +27,7 @@ app.use(helmet());
 // Rate limiting
 const limiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    max: 1000, // limit each IP to 1000 requests per windowMs (support rapid attendance scans & operations)
     message: 'Too many requests from this IP, please try again after 10 minutes'
 });
 app.use('/api', limiter);
@@ -98,6 +98,9 @@ app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
 app.use('/api/pos', require('./routes/posRoutes'));
 app.use('/api', require('./routes/examRoutes'));
 app.use('/api/sms', require('./routes/smsRoutes'));
+app.use('/api/fees', require('./routes/feeReminderRoutes'));
+app.use('/api/portal', require('./routes/portalRoutes'));
+app.use('/api/backup', require('./routes/backupRoutes'));
 
 // Start Server
 if (require.main === module) {

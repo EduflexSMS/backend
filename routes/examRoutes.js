@@ -3,7 +3,7 @@ const router = express.Router();
 const Exam = require('../models/Exam');
 const Subject = require('../models/Subject');
 const Student = require('../models/Student');
-// No auth middleware used as per other routes
+const { sendSMS } = require('../utils/smsHelper');
 
 // Helper to determine grade based on marks
 const calculateGrade = (marks) => {
@@ -16,6 +16,34 @@ const calculateGrade = (marks) => {
     return 'F';
 };
 
+// Helper to calculate student ranks
+const attachRanksToExam = (examDoc) => {
+    const examObj = examDoc.toObject ? examDoc.toObject() : examDoc;
+    const results = examObj.results || [];
+
+    // Extract sorted unique numeric marks
+    const numericMarks = results
+        .filter(r => r.marks !== 'AB' && r.marks !== 'Absent' && !isNaN(Number(r.marks)))
+        .map(r => Number(r.marks))
+        .sort((a, b) => b - a);
+
+    examObj.totalRanked = numericMarks.length;
+
+    examObj.results = results.map(r => {
+        let rank = 'AB';
+        if (r.marks !== 'AB' && r.marks !== 'Absent' && !isNaN(Number(r.marks))) {
+            rank = numericMarks.indexOf(Number(r.marks)) + 1;
+        }
+        return {
+            ...r,
+            rank
+        };
+    });
+
+    return examObj;
+};
+
+// Create new exam
 router.post('/exams', async (req, res) => {
     try {
         const { title, grade, subject, date } = req.body;
@@ -50,7 +78,7 @@ router.get('/exams', async (req, res) => {
     }
 });
 
-// Get specific exam with student details
+// Get specific exam with student details & ranks
 router.get('/exams/:id', async (req, res) => {
     try {
         const exam = await Exam.findById(req.params.id)
@@ -58,13 +86,16 @@ router.get('/exams/:id', async (req, res) => {
             .populate('results.student', 'name rfid uiid indexNumber grade mobile parentMobile');
         
         if (!exam) return res.status(404).json({ error: 'Exam not found' });
-        res.json(exam);
+        
+        const rankedExam = attachRanksToExam(exam);
+        res.json(rankedExam);
     } catch (error) {
         console.error('Error fetching exam:', error);
         res.status(500).json({ error: 'Failed to fetch exam details' });
     }
 });
 
+// Update or enter marks for a student
 router.put('/exams/:id/marks', async (req, res) => {
     try {
         const { studentId, marks } = req.body;
@@ -86,10 +117,8 @@ router.put('/exams/:id/marks', async (req, res) => {
         }
 
         const exam = await Exam.findById(examId);
-        
         if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
-        // Check if student result already exists
         const existingResultIndex = exam.results.findIndex(r => r.student.toString() === studentId);
         
         if (existingResultIndex >= 0) {
@@ -101,19 +130,97 @@ router.put('/exams/:id/marks', async (req, res) => {
 
         await exam.save();
         
-        // Re-populate to return the updated data
         const updatedExam = await Exam.findById(examId)
             .populate('subject', 'name')
             .populate('results.student', 'name rfid uiid indexNumber grade mobile parentMobile');
 
-        res.json(updatedExam);
+        const rankedExam = attachRanksToExam(updatedExam);
+        res.json(rankedExam);
     } catch (error) {
         console.error('Error updating marks:', error);
         res.status(500).json({ error: 'Failed to update marks' });
     }
 });
 
-// Update exam details (title, date, grade, subject)
+// Send exam results SMS to parents via Hutch SIM Gateway
+router.post('/exams/:id/send-sms', async (req, res) => {
+    try {
+        const { studentIds, language = 'si', customMessage } = req.body;
+        const exam = await Exam.findById(req.params.id)
+            .populate('subject', 'name')
+            .populate('results.student', 'name indexNumber mobile');
+
+        if (!exam) return res.status(404).json({ error: 'Exam not found' });
+
+        const rankedExam = attachRanksToExam(exam);
+        const subjectName = exam.subject ? exam.subject.name : 'Class';
+
+        const resultsToSend = rankedExam.results.filter(r => {
+            if (!r.student || !r.student.mobile) return false;
+            if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
+                return studentIds.includes(r.student._id.toString());
+            }
+            return true; // default send to all with results
+        });
+
+        if (resultsToSend.length === 0) {
+            return res.status(400).json({ error: 'No students with phone numbers found to send results.' });
+        }
+
+        let sentCount = 0;
+        let failedCount = 0;
+        const dispatchResults = [];
+
+        for (const item of resultsToSend) {
+            const student = item.student;
+            let msg = '';
+
+            if (customMessage) {
+                msg = customMessage
+                    .replace(/{studentName}/g, student.name)
+                    .replace(/{examTitle}/g, exam.title)
+                    .replace(/{subject}/g, subjectName)
+                    .replace(/{marks}/g, item.marks)
+                    .replace(/{grade}/g, item.grade || '')
+                    .replace(/{rank}/g, item.rank || 'N/A')
+                    .replace(/{total}/g, rankedExam.totalRanked || '');
+            } else if (language === 'si') {
+                msg = `Eduflex විභාග ලකුණු:\n${student.name} සිසුවාගේ ${subjectName} (${exam.title}) විභාගයේ ලකුණු: ${item.marks}/100 (ශ්‍රේණිය: ${item.grade || 'N/A'}, පන්ති ස්ථානය: #${item.rank || 'N/A'}/${rankedExam.totalRanked}). සුබ පැතුම්!`;
+            } else {
+                msg = `Eduflex Exam Result:\n${student.name} scored ${item.marks}/100 (Grade: ${item.grade || 'N/A'}, Rank: #${item.rank || 'N/A'}/${rankedExam.totalRanked}) for ${subjectName} (${exam.title}). Best regards!`;
+            }
+
+            try {
+                const sendRes = await sendSMS(student.mobile, msg);
+                if (sendRes.success) {
+                    sentCount++;
+                    dispatchResults.push({ studentName: student.name, mobile: student.mobile, status: 'sent' });
+                } else {
+                    failedCount++;
+                    dispatchResults.push({ studentName: student.name, mobile: student.mobile, status: 'failed', error: sendRes.error });
+                }
+            } catch (err) {
+                failedCount++;
+                dispatchResults.push({ studentName: student.name, mobile: student.mobile, status: 'failed', error: err.message });
+            }
+
+            await new Promise(r => setTimeout(r, 200));
+        }
+
+        res.json({
+            total: resultsToSend.length,
+            sent: sentCount,
+            failed: failedCount,
+            details: dispatchResults
+        });
+
+    } catch (error) {
+        console.error('Error sending exam SMS:', error);
+        res.status(500).json({ error: 'Failed to dispatch exam SMS', details: error.message });
+    }
+});
+
+// Update exam details
 router.put('/exams/:id', async (req, res) => {
     try {
         const { title, date, grade, subject } = req.body;
@@ -128,7 +235,7 @@ router.put('/exams/:id', async (req, res) => {
             .populate('results.student', 'name rfid uiid indexNumber grade mobile parentMobile');
 
         if (!updatedExam) return res.status(404).json({ error: 'Exam not found' });
-        res.json(updatedExam);
+        res.json(attachRanksToExam(updatedExam));
     } catch (error) {
         console.error('Error updating exam details:', error);
         res.status(500).json({ error: 'Failed to update exam details' });
