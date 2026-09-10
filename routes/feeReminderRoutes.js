@@ -22,7 +22,7 @@ router.get('/unpaid', async (req, res) => {
         // 2. Build Student query
         let query = {};
         if (grade) {
-            query.grade = grade;
+            query.grade = { $regex: new RegExp(`^${grade.trim()}$`, 'i') };
         }
 
         const students = await Student.find(query).lean();
@@ -36,11 +36,11 @@ router.get('/unpaid', async (req, res) => {
                 // Skip free cards
                 if (enrollment.isFreeCard) continue;
 
-                // Filter by subject if specified
-                if (subject && enrollment.subject !== subject) continue;
+                // Filter by subject if specified (case-insensitive & trimmed)
+                if (subject && enrollment.subject.trim().toLowerCase() !== subject.trim().toLowerCase()) continue;
 
                 const subInfo = subjectMap[enrollment.subject];
-                const feeAmount = subInfo ? (subInfo.fee || 0) : 0;
+                const feeAmount = (subInfo && subInfo.fee) ? subInfo.fee : 1000;
                 const isDaily = subInfo && subInfo.feeType === 'daily';
 
                 const record = (enrollment.monthlyRecords || []).find(r => r.monthIndex === targetMonth);

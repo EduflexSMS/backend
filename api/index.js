@@ -60,6 +60,10 @@ app.use('/api/payments', require('../routes/paymentRoutes'));
 app.use('/api/whatsapp', require('../routes/whatsappRoutes'));
 app.use('/api/pos', require('../routes/posRoutes'));
 app.use('/api', require('../routes/examRoutes'));
+app.use('/api/sms', require('../routes/smsRoutes'));
+app.use('/api/fees', require('../routes/feeReminderRoutes'));
+app.use('/api/portal', require('../routes/portalRoutes'));
+app.use('/api/backup', require('../routes/backupRoutes'));
 
 // Export for Vercel
 module.exports = app;
