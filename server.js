@@ -101,6 +101,7 @@ app.use('/api/sms', require('./routes/smsRoutes'));
 app.use('/api/fees', require('./routes/feeReminderRoutes'));
 app.use('/api/portal', require('./routes/portalRoutes'));
 app.use('/api/backup', require('./routes/backupRoutes'));
+app.use('/api/tutes', require('./routes/tuteRoutes'));
 
 // Start Server
 if (require.main === module) {

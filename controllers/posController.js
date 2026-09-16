@@ -16,39 +16,60 @@ exports.processCheckout = async (req, res) => {
             return res.status(404).json({ message: 'Student not found.' });
         }
 
-        // 1. Update Student's feePaid statuses
+        // 1. Update Student's feePaid statuses & term tutes
         const Subject = require('../models/Subject');
         for (const item of items) {
             const enrollment = student.enrollments.find(e => e.subject === item.subject);
             if (enrollment) {
-                const record = enrollment.monthlyRecords.find(r => r.monthIndex === item.month);
-                if (record) {
-                    if (item.weekIndex !== undefined) {
-                        const subjectObj = await Subject.findOne({ name: item.subject });
-                        const currentYear = new Date().getFullYear();
-                        const actualClassDaysCount = getClassDaysCountForMonth(subjectObj, student.grade, currentYear, item.month);
-
-                        if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
-                            record.dailyFeesPaid = Array(actualClassDaysCount).fill(false);
-                        } else if (record.dailyFeesPaid.length < actualClassDaysCount) {
-                            while (record.dailyFeesPaid.length < actualClassDaysCount) {
-                                record.dailyFeesPaid.push(false);
-                            }
-                        }
-                        record.dailyFeesPaid[item.weekIndex] = true;
-
-                        // Auto-mark attendance as present when payment is checked out
-                        if (!record.attendance || record.attendance.length === 0) {
-                            record.attendance = Array(actualClassDaysCount).fill('pending');
-                        } else if (record.attendance.length < actualClassDaysCount) {
-                            while (record.attendance.length < actualClassDaysCount) {
-                                record.attendance.push('pending');
-                            }
-                        }
-                        record.attendance[item.weekIndex] = 'present';
+                if (item.itemType === 'tute' || item.term !== undefined) {
+                    if (!enrollment.termTutes) enrollment.termTutes = [];
+                    const termNum = parseInt(item.term, 10);
+                    let tuteRec = enrollment.termTutes.find(t => t.term === termNum);
+                    if (tuteRec) {
+                        tuteRec.paid = true;
+                        tuteRec.issued = true;
+                        tuteRec.fee = item.amount || 400;
+                        tuteRec.issuedDate = new Date();
                     } else {
-                        record.feePaid = true;
-                        record.feePaidDate = new Date();
+                        enrollment.termTutes.push({
+                            term: termNum,
+                            termName: item.termName || `Term ${termNum}`,
+                            fee: item.amount || 400,
+                            paid: true,
+                            issued: true,
+                            issuedDate: new Date()
+                        });
+                    }
+                } else {
+                    const record = enrollment.monthlyRecords.find(r => r.monthIndex === item.month);
+                    if (record) {
+                        if (item.weekIndex !== undefined) {
+                            const subjectObj = await Subject.findOne({ name: item.subject });
+                            const currentYear = new Date().getFullYear();
+                            const actualClassDaysCount = getClassDaysCountForMonth(subjectObj, student.grade, currentYear, item.month);
+
+                            if (!record.dailyFeesPaid || record.dailyFeesPaid.length === 0) {
+                                record.dailyFeesPaid = Array(actualClassDaysCount).fill(false);
+                            } else if (record.dailyFeesPaid.length < actualClassDaysCount) {
+                                while (record.dailyFeesPaid.length < actualClassDaysCount) {
+                                    record.dailyFeesPaid.push(false);
+                                }
+                            }
+                            record.dailyFeesPaid[item.weekIndex] = true;
+
+                            // Auto-mark attendance as present when payment is checked out
+                            if (!record.attendance || record.attendance.length === 0) {
+                                record.attendance = Array(actualClassDaysCount).fill('pending');
+                            } else if (record.attendance.length < actualClassDaysCount) {
+                                while (record.attendance.length < actualClassDaysCount) {
+                                    record.attendance.push('pending');
+                                }
+                            }
+                            record.attendance[item.weekIndex] = 'present';
+                        } else {
+                            record.feePaid = true;
+                            record.feePaidDate = new Date();
+                        }
                     }
                 }
             }
@@ -82,32 +103,46 @@ exports.processCheckout = async (req, res) => {
             waMessage = req.body.customMessage;
         } else if (req.body.language === 'si') {
             const sinhalaMonths = ["ජනවාරි", "පෙබරවාරි", "මාර්තු", "අප්‍රේල්", "මැයි", "ජූනි", "ජූලි", "අගෝස්තු", "සැප්තැම්බර්", "ඔක්තෝබර්", "නොවැම්බර්", "දෙසැම්බර්"];
-            smsMessage = `Eduflex පන්ති ගාස්තු ලදුපත:\nසිසුවා: ${student.name} (${student.indexNumber})\nඅංකය: ${transactionId}\n`;
+            smsMessage = `Eduflex ලදුපත:\nසිසුවා: ${student.name} (${student.indexNumber})\nඅංකය: ${transactionId}\n`;
             items.forEach(item => {
-                const sMonth = item.month !== undefined && sinhalaMonths[item.month] ? sinhalaMonths[item.month] : item.monthName;
-                const weekText = item.weekName ? ` - ${item.weekName}` : '';
-                smsMessage += `- ${item.subject} (${sMonth}${weekText}): රු. ${item.amount}\n`;
+                if (item.itemType === 'tute' || item.term !== undefined) {
+                    const termNameSi = parseInt(item.term, 10) === 1 ? '1 වන වාරය (Term 1)' : parseInt(item.term, 10) === 2 ? '2 වන වාරය (Term 2)' : '3 වන වාරය (Term 3)';
+                    smsMessage += `- ${item.subject} (${termNameSi} Tute): රු. ${item.amount}\n`;
+                } else {
+                    const sMonth = item.month !== undefined && sinhalaMonths[item.month] ? sinhalaMonths[item.month] : item.monthName;
+                    const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                    smsMessage += `- ${item.subject} (${sMonth}${weekText}): රු. ${item.amount}\n`;
+                }
             });
             smsMessage += `මුළු මුදල: රු. ${totalAmount.toLocaleString()}\nදිනය: ${new Date().toLocaleDateString()}\nස්තූතියි! Eduflex Institute`;
 
-            waMessage = `✅ *පන්ති ගාස්තු ලදුපත - Eduflex*\n---------------------------------\n`;
+            waMessage = `✅ *ලදුපත - Eduflex Institute*\n---------------------------------\n`;
             waMessage += `*සිසුවා:* ${student.name}\n`;
             waMessage += `*Index:* ${student.indexNumber}\n`;
             waMessage += `*ලදුපත් අංකය:* ${transactionId}\n`;
             waMessage += `*දිනය:* ${new Date().toLocaleDateString()}\n\n`;
-            waMessage += `*ගෙවූ විෂයන්:*\n`;
+            waMessage += `*අයිතම:*\n`;
             items.forEach(item => {
-                const sMonth = item.month !== undefined && sinhalaMonths[item.month] ? sinhalaMonths[item.month] : item.monthName;
-                const weekText = item.weekName ? ` - ${item.weekName}` : '';
-                waMessage += `- ${item.subject} (${sMonth}${weekText}): රු. ${item.amount}\n`;
+                if (item.itemType === 'tute' || item.term !== undefined) {
+                    const termNameSi = parseInt(item.term, 10) === 1 ? '1 වන වාරය (Term 1)' : parseInt(item.term, 10) === 2 ? '2 වන වාරය (Term 2)' : '3 වන වාරය (Term 3)';
+                    waMessage += `- ${item.subject} (${termNameSi} Tute): රු. ${item.amount}\n`;
+                } else {
+                    const sMonth = item.month !== undefined && sinhalaMonths[item.month] ? sinhalaMonths[item.month] : item.monthName;
+                    const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                    waMessage += `- ${item.subject} (${sMonth}${weekText}): රු. ${item.amount}\n`;
+                }
             });
             waMessage += `\n*මුළු මුදල: රු. ${totalAmount.toFixed(2)}*\n---------------------------------\n`;
             waMessage += `ස්තූතියි!\nEduflex Institute\nදුරකථන: +94789232752`;
         } else {
             smsMessage = `Eduflex Receipt:\nStudent: ${student.name} (${student.indexNumber})\nReceipt: ${transactionId}\n`;
             items.forEach(item => {
-                const weekText = item.weekName ? ` - ${item.weekName}` : '';
-                smsMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
+                if (item.itemType === 'tute' || item.term !== undefined) {
+                    smsMessage += `- ${item.subject} (Term ${item.term} Tute): Rs. ${item.amount}\n`;
+                } else {
+                    const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                    smsMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
+                }
             });
             smsMessage += `Total: Rs. ${totalAmount.toLocaleString()}\nDate: ${new Date().toLocaleDateString()}\nThank you! Eduflex`;
 
@@ -116,10 +151,14 @@ exports.processCheckout = async (req, res) => {
             waMessage += `*Index:* ${student.indexNumber}\n`;
             waMessage += `*Receipt No:* ${transactionId}\n`;
             waMessage += `*Date:* ${new Date().toLocaleDateString()}\n\n`;
-            waMessage += `*Paid Subjects:*\n`;
+            waMessage += `*Items:*\n`;
             items.forEach(item => {
-                const weekText = item.weekName ? ` - ${item.weekName}` : '';
-                waMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
+                if (item.itemType === 'tute' || item.term !== undefined) {
+                    waMessage += `- ${item.subject} (Term ${item.term} Tute): Rs. ${item.amount}\n`;
+                } else {
+                    const weekText = item.weekName ? ` - ${item.weekName}` : '';
+                    waMessage += `- ${item.subject} (${item.monthName}${weekText}): Rs. ${item.amount}\n`;
+                }
             });
             waMessage += `\n*Total Paid: Rs. ${totalAmount.toFixed(2)}*\n---------------------------------\n`;
             waMessage += `Thank you!\nEduflex Institute\nContact: +94789232752`;

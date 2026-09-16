@@ -21,11 +21,23 @@ function arrayLimit(val) {
   return val.length <= 31;
 }
 
+const termTuteSchema = new mongoose.Schema({
+  term: { type: Number, required: true }, // 1, 2, 3
+  termName: { type: String },
+  year: { type: Number, default: () => new Date().getFullYear() },
+  fee: { type: Number, default: 400 },
+  paid: { type: Boolean, default: false },
+  issued: { type: Boolean, default: false },
+  issuedDate: { type: Date, default: null },
+  transactionId: { type: String, default: null }
+});
+
 const enrollmentSchema = new mongoose.Schema({
   subject: { type: String, required: true },
   isFreeCard: { type: Boolean, default: false },
   enrolledAt: { type: Date, default: Date.now },
-  monthlyRecords: [recordSchema]
+  monthlyRecords: [recordSchema],
+  termTutes: [termTuteSchema]
 });
 
 const studentSchema = new mongoose.Schema({

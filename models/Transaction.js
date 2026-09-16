@@ -6,9 +6,12 @@ const transactionSchema = new mongoose.Schema({
     studentName: { type: String, required: true },
     indexNumber: { type: String, required: true },
     items: [{
+        itemType: { type: String, enum: ['fee', 'tute'], default: 'fee' },
         subject: { type: String, required: true },
-        month: { type: Number, required: true },
-        monthName: { type: String, required: true },
+        month: { type: Number },
+        monthName: { type: String },
+        term: { type: Number },
+        termName: { type: String },
         weekIndex: { type: Number },
         weekName: { type: String },
         amount: { type: Number, required: true }
