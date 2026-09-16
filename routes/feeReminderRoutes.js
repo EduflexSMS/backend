@@ -11,8 +11,9 @@ const MONTH_NAMES_SINHALA = ["ජනවාරි", "පෙබරවාරි", "
 // Query students with pending fees for a specific month (and optional subject/grade)
 router.get('/unpaid', async (req, res) => {
     try {
-        const { month, subject, grade } = req.query;
+        const { month, subject, grade, year } = req.query;
         const targetMonth = month !== undefined && month !== '' ? parseInt(month) : new Date().getMonth();
+        const targetYear = year !== undefined && year !== '' ? parseInt(year) : new Date().getFullYear();
 
         // 1. Fetch subjects map for fee info
         const subjects = await Subject.find().lean();
@@ -38,6 +39,15 @@ router.get('/unpaid', async (req, res) => {
 
                 // Filter by subject if specified (case-insensitive & trimmed)
                 if (subject && enrollment.subject.trim().toLowerCase() !== subject.trim().toLowerCase()) continue;
+
+                // Check Enrollment Date: Skip if student/subject was enrolled AFTER the target month
+                const enrollDate = Student.getEnrollmentDate(enrollment, student);
+                const enrollYear = enrollDate.getFullYear();
+                const enrollMonth = enrollDate.getMonth();
+
+                // If enrolled in a future year, or same year but later month -> skip!
+                if (enrollYear > targetYear) continue;
+                if (enrollYear === targetYear && targetMonth < enrollMonth) continue;
 
                 const subInfo = subjectMap[enrollment.subject];
                 const feeAmount = (subInfo && subInfo.fee) ? subInfo.fee : 1000;

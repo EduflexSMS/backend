@@ -49,7 +49,22 @@ exports.getMonthlyReport = async (req, res) => {
             const enrollment = student.enrollments.find(e => e.subject === subject);
             const record = enrollment ? enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex) : null;
 
-            if (record) {
+            const currentYear = new Date().getFullYear();
+            const enrollDate = Student.getEnrollmentDate(enrollment, student);
+            const enrollYear = enrollDate.getFullYear();
+            const enrollMonth = enrollDate.getMonth();
+            const notEnrolled = enrollYear > currentYear || (enrollYear === currentYear && monthIndex < enrollMonth);
+
+            if (notEnrolled) {
+                worksheet.addRow({
+                    indexNumber: student.indexNumber,
+                    name: student.name,
+                    mobile: student.mobile,
+                    attendance: 'Not Enrolled',
+                    feePaid: 'Not Enrolled',
+                    tutesGiven: 'Not Enrolled'
+                });
+            } else if (record) {
                 const attendanceCount = record.attendance.filter(a => a === true || a === 'present').length;
 
                 // Helper to calculate days based on all scheduled days for a grade
@@ -87,8 +102,6 @@ exports.getMonthlyReport = async (req, res) => {
                     }
                     return count;
                 };
-
-                const currentYear = new Date().getFullYear();
 
                 const gradeSchedules = subjectObj ? subjectObj.gradeSchedules.filter(s => s.grade === grade) : [];
                 const defaultClassDay = subjectObj ? subjectObj.classDay : 'Monday';
@@ -264,12 +277,14 @@ exports.createStudent = async (req, res) => {
         const Subject = require('../models/Subject');
         const subjectObjs = await Subject.find({ name: { $in: subjects || [] } });
         const currentYear = new Date().getFullYear();
+        const enrollDate = req.body.enrolledAt ? new Date(req.body.enrolledAt) : new Date();
 
         const enrollments = (subjects || []).map(subjName => {
             const subjectObj = subjectObjs.find(s => s.name === subjName);
             return {
                 subject: subjName,
                 isFreeCard: (freeCardSubjects || []).includes(subjName),
+                enrolledAt: enrollDate,
                 monthlyRecords: initializeRecordsDynamic(subjectObj, req.body.grade, currentYear)
             };
         });
@@ -322,15 +337,19 @@ exports.updateStudent = async (req, res) => {
                     return {
                         subject: subjName,
                         isFreeCard: (freeCardSubjects || []).includes(subjName),
+                        enrolledAt: new Date(),
                         monthlyRecords: initializeRecordsDynamic(subjectObj, student.grade, currentYear)
                     };
                 });
                 student.enrollments.push(...newEnrollments);
             }
 
-            // 3. Update isFreeCard status for all enrollments
+            // 3. Update isFreeCard status and backfill enrolledAt if missing
             student.enrollments.forEach(enrollment => {
                 enrollment.isFreeCard = (freeCardSubjects || []).includes(enrollment.subject);
+                if (!enrollment.enrolledAt) {
+                    enrollment.enrolledAt = student.createdAt || (student._id && student._id.getTimestamp ? student._id.getTimestamp() : new Date());
+                }
             });
         }
 
@@ -553,11 +572,18 @@ exports.getClassReport = async (req, res) => {
             'enrollments.subject': subject
         });
 
+        const currentYear = new Date().getFullYear();
+
         let report = students.map(student => {
             const enrollment = student.enrollments.find(e => e.subject === subject);
             // Initialize Default Record if not found (or just return nulls)
             // Ideally records are initialized on creation, but for safety:
             const record = enrollment ? enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex) : null;
+
+            const enrollDate = Student.getEnrollmentDate(enrollment, student);
+            const enrollYear = enrollDate.getFullYear();
+            const enrollMonth = enrollDate.getMonth();
+            const notEnrolled = enrollYear > currentYear || (enrollYear === currentYear && monthIndex < enrollMonth);
 
             return {
                 id: student._id,
@@ -567,7 +593,9 @@ exports.getClassReport = async (req, res) => {
                 attendance: record ? record.attendance : [],
                 feePaid: record ? record.feePaid : false,
                 tutesGiven: record ? record.tutesGiven : false,
-                isFreeCard: enrollment ? enrollment.isFreeCard : false
+                isFreeCard: enrollment ? enrollment.isFreeCard : false,
+                notEnrolled: notEnrolled,
+                enrolledAt: enrollDate
             };
         });
 
@@ -598,12 +626,18 @@ exports.getGradeReport = async (req, res) => {
 
         const students = await Student.find({ grade: { $regex: gradeRegex } });
 
+        const currentYear = new Date().getFullYear();
         const report = {};
 
         students.forEach(student => {
             student.enrollments.forEach(enrollment => {
                 const subject = enrollment.subject;
                 const record = enrollment.monthlyRecords.find(r => r.monthIndex === monthIndex);
+
+                const enrollDate = Student.getEnrollmentDate(enrollment, student);
+                const enrollYear = enrollDate.getFullYear();
+                const enrollMonth = enrollDate.getMonth();
+                const notEnrolled = enrollYear > currentYear || (enrollYear === currentYear && monthIndex < enrollMonth);
 
                 if (!report[subject]) {
                     report[subject] = [];
@@ -617,7 +651,9 @@ exports.getGradeReport = async (req, res) => {
                     attendance: record ? record.attendance : [],
                     feePaid: record ? record.feePaid : false,
                     tutesGiven: record ? record.tutesGiven : false,
-                    isFreeCard: enrollment.isFreeCard
+                    isFreeCard: enrollment.isFreeCard,
+                    notEnrolled: notEnrolled,
+                    enrolledAt: enrollDate
                 });
             });
         });
@@ -770,15 +806,21 @@ exports.getDailyReport = async (req, res) => {
                 }
             }
 
+            const enrollDate = Student.getEnrollmentDate(enrollment, student);
+            const enrollDateOnly = new Date(enrollDate);
+            enrollDateOnly.setHours(0, 0, 0, 0);
+            const notEnrolledToday = reportDate < enrollDateOnly;
+
             return {
                 id: student._id,
                 name: student.name,
                 indexNumber: student.indexNumber,
                 mobile: student.mobile,
-                attendanceToday: attendanceStatus, // 'present', 'absent', 'pending', true, false
-                feePaidStatus: feePaidStatus,
+                attendanceToday: notEnrolledToday ? 'not_enrolled' : attendanceStatus, // 'present', 'absent', 'pending', true, false, 'not_enrolled'
+                feePaidStatus: notEnrolledToday ? false : feePaidStatus,
                 isFreeCard: enrollment ? enrollment.isFreeCard : false,
-                paidToday: paidToday, 
+                notEnrolled: notEnrolledToday,
+                paidToday: notEnrolledToday ? false : paidToday, 
                 tutesGiven: record ? record.tutesGiven : false
             };
         });

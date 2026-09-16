@@ -24,6 +24,7 @@ function arrayLimit(val) {
 const enrollmentSchema = new mongoose.Schema({
   subject: { type: String, required: true },
   isFreeCard: { type: Boolean, default: false },
+  enrolledAt: { type: Date, default: Date.now },
   monthlyRecords: [recordSchema]
 });
 
@@ -35,4 +36,17 @@ const studentSchema = new mongoose.Schema({
   enrollments: [enrollmentSchema]
 }, { timestamps: true });
 
-module.exports = mongoose.model('Student', studentSchema);
+function getEnrollmentDate(enrollment, student) {
+  if (enrollment && enrollment.enrolledAt) return new Date(enrollment.enrolledAt);
+  if (student && student.createdAt) return new Date(student.createdAt);
+  if (student && student._id && typeof student._id.getTimestamp === 'function') {
+    return student._id.getTimestamp();
+  }
+  return new Date();
+}
+
+const Student = mongoose.model('Student', studentSchema);
+Student.getEnrollmentDate = getEnrollmentDate;
+
+module.exports = Student;
+module.exports.getEnrollmentDate = getEnrollmentDate;

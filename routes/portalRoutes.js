@@ -37,6 +37,7 @@ router.get('/student/:identifier', async (req, res) => {
         subjects.forEach(s => { subjectMap[s.name] = s; });
 
         const currentMonthIndex = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
 
         // 3. Process enrollment details
         let totalSessionsCount = 0;
@@ -47,6 +48,10 @@ router.get('/student/:identifier', async (req, res) => {
             const fee = subInfo.fee || 0;
             const feeType = subInfo.feeType || 'monthly';
 
+            const enrollDate = Student.getEnrollmentDate(enrollment, student);
+            const enrollYear = enrollDate.getFullYear();
+            const enrollMonth = enrollDate.getMonth();
+
             let subSessions = 0;
             let subAttended = 0;
 
@@ -54,11 +59,17 @@ router.get('/student/:identifier', async (req, res) => {
                 const attendedDays = (rec.attendance || []).filter(a => a === 'present' || a === true || a === 'true').length;
                 const totalDays = (rec.attendance || []).filter(a => a !== 'pending').length;
 
-                subSessions += totalDays;
-                subAttended += attendedDays;
+                const notEnrolled = enrollYear > currentYear || (enrollYear === currentYear && rec.monthIndex < enrollMonth);
+
+                if (!notEnrolled) {
+                    subSessions += totalDays;
+                    subAttended += attendedDays;
+                }
 
                 let isPaid = false;
-                if (enrollment.isFreeCard) {
+                if (notEnrolled) {
+                    isPaid = false;
+                } else if (enrollment.isFreeCard) {
                     isPaid = true;
                 } else if (feeType === 'daily') {
                     const paidDays = (rec.dailyFeesPaid || []).filter(p => Boolean(p)).length;
@@ -72,6 +83,7 @@ router.get('/student/:identifier', async (req, res) => {
                     monthName: MONTH_NAMES[rec.monthIndex],
                     monthNameSi: MONTH_NAMES_SINHALA[rec.monthIndex],
                     isCurrentMonth: rec.monthIndex === currentMonthIndex,
+                    notEnrolled,
                     feePaid: isPaid,
                     feePaidDate: rec.feePaidDate,
                     feeAmount: fee,
