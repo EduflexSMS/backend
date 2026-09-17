@@ -283,3 +283,79 @@ exports.getTeachers = async (req, res) => {
     }
 };
 
+// @desc    Update Admin Credentials (Username & Password)
+// @route   PUT /api/auth/admin-credentials
+// @access  Private (Admin)
+exports.updateAdmin = async (req, res) => {
+    try {
+        const { currentUsername, currentPassword, newUsername, newPassword } = req.body;
+
+        if (!currentPassword) {
+            return res.status(400).json({ message: 'Current password is required to make changes' });
+        }
+
+        // Find user by currentUsername or look for any admin
+        let user = null;
+        if (currentUsername) {
+            user = await User.findOne({ username: currentUsername });
+        }
+        if (!user) {
+            user = await User.findOne({ role: 'admin' });
+        }
+
+        if (!user) {
+            return res.status(404).json({ message: 'Admin account not found' });
+        }
+
+        // Verify current password
+        const isMatch = await user.matchPassword(currentPassword);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Current password does not match' });
+        }
+
+        let updatedFields = [];
+
+        // Update username if requested
+        if (newUsername && newUsername.trim() && newUsername.trim() !== user.username) {
+            const trimmedUser = newUsername.trim();
+            const existing = await User.findOne({ username: trimmedUser });
+            if (existing && existing._id.toString() !== user._id.toString()) {
+                return res.status(400).json({ message: `Username '${trimmedUser}' is already taken` });
+            }
+            user.username = trimmedUser;
+            updatedFields.push('username');
+        }
+
+        // Update password if requested
+        if (newPassword && newPassword.trim()) {
+            const trimmedPass = newPassword.trim();
+            if (trimmedPass.length < 4) {
+                return res.status(400).json({ message: 'New password must be at least 4 characters long' });
+            }
+            user.password = trimmedPass; // pre-save hook hashes with bcrypt
+            user.plainPassword = trimmedPass;
+            updatedFields.push('password');
+        }
+
+        if (updatedFields.length === 0) {
+            return res.status(400).json({ message: 'No changes provided for username or password' });
+        }
+
+        await user.save();
+
+        res.json({
+            success: true,
+            message: `Admin ${updatedFields.join(' and ')} updated successfully!`,
+            user: {
+                _id: user._id,
+                username: user.username,
+                role: user.role,
+                token: generateToken(user._id)
+            }
+        });
+    } catch (error) {
+        console.error('Update Admin Error:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+

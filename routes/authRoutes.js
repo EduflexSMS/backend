@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { loginUser, registerUser, createTeacher, getTeachers, seedTeachers, updateTeacher, deleteTeacher } = require('../controllers/authController');
+const { loginUser, registerUser, createTeacher, getTeachers, seedTeachers, updateTeacher, deleteTeacher, updateAdmin } = require('../controllers/authController');
 const { getTeacherPortalData } = require('../controllers/teacherController');
 
 router.get('/seed-teachers', seedTeachers);
@@ -12,5 +12,9 @@ router.post('/create-teacher', createTeacher);
 router.get('/teachers', getTeachers);
 router.put('/teachers/:id', updateTeacher);
 router.delete('/teachers/:id', deleteTeacher);
+
+// Admin Credentials Management
+router.put('/admin-credentials', updateAdmin);
+router.put('/profile', updateAdmin);
 
 module.exports = router;
