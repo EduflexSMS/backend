@@ -212,15 +212,18 @@ exports.getTeacherPortalData = async (req, res) => {
             const marksList = results
                 .map(r => typeof r.marks === 'number' ? r.marks : parseFloat(r.marks))
                 .filter(m => !isNaN(m));
-            const avg = marksList.length > 0 ? Math.round(marksList.reduce((a, b) => a + b, 0) / marksList.length) : 0;
+            const totalMarks = ex.totalMarks || 100;
+            const rawAvg = marksList.length > 0 ? (marksList.reduce((a, b) => a + b, 0) / marksList.length) : 0;
+            const avgPct = Math.round((rawAvg / totalMarks) * 100);
 
             return {
                 id: ex._id,
                 title: ex.title,
                 grade: ex.grade,
                 date: ex.date,
+                totalMarks: totalMarks,
                 studentCount: results.length,
-                averageMarks: avg
+                averageMarks: avgPct
             };
         });
 

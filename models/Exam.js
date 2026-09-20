@@ -10,6 +10,7 @@ const examSchema = new mongoose.Schema({
     title: { type: String, required: true },
     grade: { type: String, required: true },
     subject: { type: mongoose.Schema.Types.ObjectId, ref: 'Subject', required: true },
+    totalMarks: { type: Number, required: true, default: 100, min: 1 },
     date: { type: Date, required: true, default: Date.now },
     results: [markSchema]
 }, { timestamps: true });

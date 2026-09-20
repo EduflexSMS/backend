@@ -174,6 +174,7 @@ router.get('/student/:identifier', async (req, res) => {
                 subject: exam.subject ? exam.subject.name : 'Unknown',
                 date: exam.date,
                 marks: studentResult.marks,
+                totalMarks: exam.totalMarks || 100,
                 gradeBadge: studentResult.grade || 'N/A',
                 rank: rank,
                 totalStudents: validResults.length

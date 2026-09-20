@@ -5,14 +5,17 @@ const Subject = require('../models/Subject');
 const Student = require('../models/Student');
 const { sendSMS } = require('../utils/smsHelper');
 
-// Helper to determine grade based on marks
-const calculateGrade = (marks) => {
+// Helper to determine grade based on marks and exam totalMarks
+const calculateGrade = (marks, totalMarks = 100) => {
     if (marks === 'AB' || marks === 'Absent') return 'AB';
     const num = Number(marks);
-    if (num >= 75) return 'A';
-    if (num >= 65) return 'B';
-    if (num >= 55) return 'C';
-    if (num >= 40) return 'S';
+    if (isNaN(num)) return 'F';
+    const max = Number(totalMarks) > 0 ? Number(totalMarks) : 100;
+    const pct = (num / max) * 100;
+    if (pct >= 75) return 'A';
+    if (pct >= 65) return 'B';
+    if (pct >= 55) return 'C';
+    if (pct >= 40) return 'S';
     return 'F';
 };
 
@@ -46,12 +49,19 @@ const attachRanksToExam = (examDoc) => {
 // Create new exam
 router.post('/exams', async (req, res) => {
     try {
-        const { title, grade, subject, date } = req.body;
+        const { title, grade, subject, date, totalMarks } = req.body;
         if (!title || !grade || !subject) {
             return res.status(400).json({ error: 'Title, grade, and subject are required' });
         }
         
-        const newExam = new Exam({ title, grade, subject, date: date || Date.now() });
+        const parsedTotalMarks = Number(totalMarks) > 0 ? Number(totalMarks) : 100;
+        const newExam = new Exam({
+            title,
+            grade,
+            subject,
+            totalMarks: parsedTotalMarks,
+            date: date || Date.now()
+        });
         const savedExam = await newExam.save();
         res.status(201).json(savedExam);
     } catch (error) {
@@ -101,6 +111,10 @@ router.put('/exams/:id/marks', async (req, res) => {
         const { studentId, marks } = req.body;
         const examId = req.params.id;
 
+        const exam = await Exam.findById(examId);
+        if (!exam) return res.status(404).json({ error: 'Exam not found' });
+
+        const maxMarks = exam.totalMarks || 100;
         let finalMarks;
         let grade;
 
@@ -109,15 +123,12 @@ router.put('/exams/:id/marks', async (req, res) => {
             grade = 'AB';
         } else {
             const numMarks = Number(marks);
-            if (isNaN(numMarks) || numMarks < 0 || numMarks > 100) {
-                return res.status(400).json({ error: 'Marks must be between 0 and 100 or AB' });
+            if (isNaN(numMarks) || numMarks < 0 || numMarks > maxMarks) {
+                return res.status(400).json({ error: `Marks must be between 0 and ${maxMarks} or AB` });
             }
             finalMarks = numMarks;
-            grade = calculateGrade(numMarks);
+            grade = calculateGrade(numMarks, maxMarks);
         }
-
-        const exam = await Exam.findById(examId);
-        if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
         const existingResultIndex = exam.results.findIndex(r => r.student.toString() === studentId);
         
@@ -154,6 +165,7 @@ router.post('/exams/:id/send-sms', async (req, res) => {
 
         const rankedExam = attachRanksToExam(exam);
         const subjectName = exam.subject ? exam.subject.name : 'Class';
+        const maxMarks = exam.totalMarks || 100;
 
         const resultsToSend = rankedExam.results.filter(r => {
             if (!r.student || !r.student.mobile) return false;
@@ -181,13 +193,14 @@ router.post('/exams/:id/send-sms', async (req, res) => {
                     .replace(/{examTitle}/g, exam.title)
                     .replace(/{subject}/g, subjectName)
                     .replace(/{marks}/g, item.marks)
+                    .replace(/{totalMarks}/g, maxMarks)
                     .replace(/{grade}/g, item.grade || '')
                     .replace(/{rank}/g, item.rank || 'N/A')
                     .replace(/{total}/g, rankedExam.totalRanked || '');
             } else if (language === 'si') {
-                msg = `Eduflex විභාග ලකුණු:\n${student.name} සිසුවාගේ ${subjectName} (${exam.title}) විභාගයේ ලකුණු: ${item.marks}/100 (ශ්‍රේණිය: ${item.grade || 'N/A'}, පන්ති ස්ථානය: #${item.rank || 'N/A'}/${rankedExam.totalRanked}). සුබ පැතුම්!`;
+                msg = `Eduflex විභාග ලකුණු:\n${student.name} සිසුවාගේ ${subjectName} (${exam.title}) විභාගයේ ලකුණු: ${item.marks}/${maxMarks} (ශ්‍රේණිය: ${item.grade || 'N/A'}, පන්ති ස්ථානය: #${item.rank || 'N/A'}/${rankedExam.totalRanked}). සුබ පැතුම්!`;
             } else {
-                msg = `Eduflex Exam Result:\n${student.name} scored ${item.marks}/100 (Grade: ${item.grade || 'N/A'}, Rank: #${item.rank || 'N/A'}/${rankedExam.totalRanked}) for ${subjectName} (${exam.title}). Best regards!`;
+                msg = `Eduflex Exam Result:\n${student.name} scored ${item.marks}/${maxMarks} (Grade: ${item.grade || 'N/A'}, Rank: #${item.rank || 'N/A'}/${rankedExam.totalRanked}) for ${subjectName} (${exam.title}). Best regards!`;
             }
 
             try {
@@ -223,18 +236,39 @@ router.post('/exams/:id/send-sms', async (req, res) => {
 // Update exam details
 router.put('/exams/:id', async (req, res) => {
     try {
-        const { title, date, grade, subject } = req.body;
-        const updateData = {};
-        if (title !== undefined) updateData.title = title;
-        if (date !== undefined) updateData.date = date;
-        if (grade !== undefined) updateData.grade = grade;
-        if (subject !== undefined) updateData.subject = subject;
+        const { title, date, grade, subject, totalMarks } = req.body;
+        const exam = await Exam.findById(req.params.id);
+        if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
-        const updatedExam = await Exam.findByIdAndUpdate(req.params.id, updateData, { new: true })
+        if (title !== undefined) exam.title = title;
+        if (date !== undefined) exam.date = date;
+        if (grade !== undefined) exam.grade = grade;
+        if (subject !== undefined) exam.subject = subject;
+
+        let totalMarksChanged = false;
+        if (totalMarks !== undefined) {
+            const parsedTotal = Number(totalMarks) > 0 ? Number(totalMarks) : 100;
+            if (exam.totalMarks !== parsedTotal) {
+                exam.totalMarks = parsedTotal;
+                totalMarksChanged = true;
+            }
+        }
+
+        // If totalMarks changed, recompute grades for all existing student marks!
+        if (totalMarksChanged) {
+            exam.results.forEach(r => {
+                if (r.marks !== 'AB' && r.marks !== 'Absent' && !isNaN(Number(r.marks))) {
+                    r.grade = calculateGrade(r.marks, exam.totalMarks);
+                }
+            });
+        }
+
+        await exam.save();
+
+        const updatedExam = await Exam.findById(req.params.id)
             .populate('subject', 'name')
             .populate('results.student', 'name rfid uiid indexNumber grade mobile parentMobile');
 
-        if (!updatedExam) return res.status(404).json({ error: 'Exam not found' });
         res.json(attachRanksToExam(updatedExam));
     } catch (error) {
         console.error('Error updating exam details:', error);
