@@ -846,17 +846,18 @@ exports.markAttendanceQR = async (req, res) => {
     try {
         const { indexNumber, subject, grade } = req.body;
 
-        if (!indexNumber || !subject || !grade) {
-            return res.status(400).json({ message: 'Index Number, Subject, and Grade are required' });
+        if (!indexNumber || !subject) {
+            return res.status(400).json({ message: 'Index Number and Subject are required' });
         }
 
-        const student = await Student.findOne({ indexNumber });
+        const trimmedIndex = indexNumber.toString().trim();
+        const student = await Student.findOne({ indexNumber: trimmedIndex });
         if (!student) {
-            return res.status(404).json({ message: 'Student not found' });
+            return res.status(404).json({ message: `Student with index "${trimmedIndex}" not found` });
         }
 
-        // Validate Grade strictly
-        if (student.grade !== grade) {
+        // Validate Grade strictly if provided, otherwise auto-detect student.grade
+        if (grade && student.grade !== grade) {
             return res.status(400).json({ message: `Student is in ${student.grade}, but selected class is for ${grade}` });
         }
 
