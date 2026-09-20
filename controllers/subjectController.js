@@ -13,7 +13,7 @@ exports.getAllSubjects = async (req, res) => {
 
 exports.createSubject = async (req, res) => {
     try {
-        const { name, description, color, fee, feeType, classDaysCount, teacherName, teacherDescription, teacherImage } = req.body;
+        const { name, description, color, fee, feeType, classDaysCount, gradeSchedules, teacherName, teacherDescription, teacherImage } = req.body;
         if (!name) return res.status(400).json({ message: 'Name is required' });
 
         const existing = await Subject.findOne({ name });
@@ -25,7 +25,8 @@ exports.createSubject = async (req, res) => {
             color, 
             fee: fee || 0, 
             feeType: feeType || 'monthly',
-            classDaysCount: classDaysCount || 5
+            classDaysCount: classDaysCount || 5,
+            gradeSchedules: gradeSchedules || []
         });
         await subject.save();
 
@@ -89,23 +90,31 @@ exports.updateSubject = async (req, res) => {
             );
         }
 
-        // Update teacher if teacherName is provided
-        if (teacherName) {
-            const userExists = await User.findOne({ username: teacherName });
-            if (!userExists) {
-                await User.create({
-                    username: teacherName,
-                    password: 'password',
-                    role: 'teacher',
-                    assignedSubject: subject.name,
-                    description: teacherDescription || '',
-                    image: teacherImage || ''
-                });
-            } else {
-                userExists.assignedSubject = subject.name;
-                if (teacherDescription !== undefined) userExists.description = teacherDescription;
-                if (teacherImage !== undefined) userExists.image = teacherImage;
-                await userExists.save();
+        // Update teacher if teacherName is provided or cleared
+        if (teacherName !== undefined) {
+            // Unassign previous teachers who had this subject
+            await User.updateMany(
+                { role: 'teacher', assignedSubject: { $in: [subjectName, subject.name] }, username: { $ne: teacherName } },
+                { $unset: { assignedSubject: "" } }
+            );
+
+            if (teacherName) {
+                const userExists = await User.findOne({ username: teacherName });
+                if (!userExists) {
+                    await User.create({
+                        username: teacherName,
+                        password: 'password', // Default password
+                        role: 'teacher',
+                        assignedSubject: subject.name,
+                        description: teacherDescription || '',
+                        image: teacherImage || ''
+                    });
+                } else {
+                    userExists.assignedSubject = subject.name;
+                    if (teacherDescription !== undefined) userExists.description = teacherDescription;
+                    if (teacherImage !== undefined) userExists.image = teacherImage;
+                    await userExists.save();
+                }
             }
         }
 
