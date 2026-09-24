@@ -19,10 +19,11 @@ exports.generateMonthlyReport = async (req, res) => {
         const isDailyFee = subjectObj && subjectObj.feeType === 'daily';
 
         // Robust grade matching: handle "Grade 6" vs "Grade 06", and custom class names
-        const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = isNaN(gradeNum)
-            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
-            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const trimmedGrade = grade.trim();
+        const simpleMatch = trimmedGrade.match(/^Grade\s*0*(\d+)$/i);
+        const gradeRegex = simpleMatch
+            ? new RegExp(`^Grade\\s*0*${parseInt(simpleMatch[1], 10)}$`, 'i')
+            : new RegExp(`^${trimmedGrade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i');
 
         // Find students match grade and have subject enrollment
         let students = await Student.find({

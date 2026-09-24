@@ -74,10 +74,11 @@ exports.getTeacherPortalData = async (req, res) => {
 
         const classes = allGrades.map(gradeName => {
             // Match students in this grade
-            const gradeNum = parseInt(gradeName.replace(/\D/g, ''));
-            const gradeRegex = isNaN(gradeNum)
-                ? new RegExp(`^${gradeName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
-                : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+            const trimmedName = gradeName.trim();
+            const simpleMatch = trimmedName.match(/^Grade\s*0*(\d+)$/i);
+            const gradeRegex = simpleMatch
+                ? new RegExp(`^Grade\\s*0*${parseInt(simpleMatch[1], 10)}$`, 'i')
+                : new RegExp(`^${trimmedName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i');
 
             const classStudents = enrolledStudents.filter(s => gradeRegex.test(s.grade));
             const studentCount = classStudents.length;

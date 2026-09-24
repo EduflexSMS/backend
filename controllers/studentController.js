@@ -3,6 +3,17 @@ const Joi = require('joi');
 const ExcelJS = require('exceljs');
 const { getClassDaysCountForMonth } = require('../utils/calendarHelper');
 
+const getGradeRegex = (grade) => {
+    if (!grade) return /.*/;
+    const trimmed = grade.trim();
+    const simpleMatch = trimmed.match(/^Grade\s*0*(\d+)$/i);
+    if (simpleMatch) {
+        const num = parseInt(simpleMatch[1], 10);
+        return new RegExp(`^Grade\\s*0*${num}$`, 'i');
+    }
+    return new RegExp(`^${trimmed.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i');
+};
+
 // ... existing code ...
 
 // GET /reports/monthly
@@ -833,10 +844,7 @@ exports.getClassReport = async (req, res) => {
         const monthIndex = parseInt(month);
 
         // Robust grade matching: handle "Grade 6" vs "Grade 06", and custom class names
-        const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = isNaN(gradeNum)
-            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
-            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const gradeRegex = getGradeRegex(grade);
 
         // Find students in the grade who have the subject in enrollments
         const students = await Student.find({
@@ -891,10 +899,7 @@ exports.getGradeReport = async (req, res) => {
         }
 
         const monthIndex = parseInt(month);
-        const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = isNaN(gradeNum)
-            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
-            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const gradeRegex = getGradeRegex(grade);
 
         const students = await Student.find({ grade: { $regex: gradeRegex } });
 
@@ -1006,10 +1011,7 @@ exports.getDailyReport = async (req, res) => {
             weekIndex = actualClassDaysCountForGrade - 1;
         }
 
-        const gradeNum = parseInt(grade.replace(/\D/g, ''));
-        const gradeRegex = isNaN(gradeNum)
-            ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
-            : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+        const gradeRegex = getGradeRegex(grade);
 
         const isDailyFee = subjectObj && subjectObj.feeType === 'daily';
 

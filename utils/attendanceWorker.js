@@ -20,10 +20,11 @@ async function checkAndMarkAbsents() {
             const { subject, grade, monthIndex, weekIndex } = session;
             console.log(`[AttendanceWorker] Processing: ${subject} (${grade}) - Month ${monthIndex}, Week ${weekIndex + 1}`);
 
-            const gradeNum = parseInt(grade.replace(/\D/g, ''));
-            const gradeRegex = isNaN(gradeNum)
-                ? new RegExp(`^${grade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i')
-                : new RegExp(`^Grade 0?${gradeNum}$`, 'i');
+            const trimmedGrade = grade.trim();
+            const simpleMatch = trimmedGrade.match(/^Grade\s*0*(\d+)$/i);
+            const gradeRegex = simpleMatch
+                ? new RegExp(`^Grade\\s*0*${parseInt(simpleMatch[1], 10)}$`, 'i')
+                : new RegExp(`^${trimmedGrade.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i');
 
             // Find all students in this grade who are enrolled in this subject
             const students = await Student.find({
