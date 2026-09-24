@@ -4,6 +4,9 @@ const studentController = require('../controllers/studentController');
 
 router.post('/students', studentController.createStudent);
 router.get('/students/grades', studentController.getGrades);
+router.post('/students/grades', studentController.createGrade);
+router.put('/students/grades/:oldGrade', studentController.updateGrade);
+router.delete('/students/grades/:grade', studentController.deleteGrade);
 router.get('/students', studentController.getStudents);
 router.put('/students/:id', studentController.updateStudent);
 router.delete('/students/:id', studentController.deleteStudent);

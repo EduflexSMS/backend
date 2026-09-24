@@ -193,18 +193,290 @@ function initializeRecordsDynamic(subjectObj, grade, year = new Date().getFullYe
 // GET /students/grades
 exports.getGrades = async (req, res) => {
     try {
-        const grades = await Student.distinct('grade');
-        // Sort grades naturally if possible (Grade 06, Grade 07...)
-        grades.sort((a, b) => {
-            const numA = parseInt(a.replace(/\D/g, '')) || 0;
-            const numB = parseInt(b.replace(/\D/g, '')) || 0;
+        const { detailed } = req.query;
+
+        // 1. Get distinct grades from existing students
+        const distinctGrades = await Student.distinct('grade');
+
+        // 2. Fetch configured grades from Setting
+        const Setting = require('../models/Setting');
+        let settingRecord = await Setting.findOne({ key: 'grades_config' });
+        let configuredGrades = settingRecord && Array.isArray(settingRecord.value) ? settingRecord.value : null;
+
+        // Fallback default list if no configuration exists yet
+        const defaultGrades = [
+            { name: 'Grade 03', shortCode: '03', whatsappLink: 'https://chat.whatsapp.com/JDa517chrKQ9459MfzRSZC' },
+            { name: 'Grade 04', shortCode: '04', whatsappLink: 'https://chat.whatsapp.com/Il7vUb6trXOBViX4U46dfm' },
+            { name: 'Grade 05', shortCode: '05', whatsappLink: 'https://chat.whatsapp.com/K0df52vVfPoDjFuLtYrneG' },
+            { name: 'Grade 06', shortCode: '06', whatsappLink: 'https://chat.whatsapp.com/Ebz4zJgdDhDEn1p2Z6HzbX' },
+            { name: 'Grade 07', shortCode: '07', whatsappLink: 'https://chat.whatsapp.com/Ko87JpVAHdMJ3UCIDHh22a' },
+            { name: 'Grade 08', shortCode: '08', whatsappLink: 'https://chat.whatsapp.com/LfrLuuB0NmE37Bul1cSwog' },
+            { name: 'Grade 09', shortCode: '09', whatsappLink: 'https://chat.whatsapp.com/KEoJ2cotqWUA92EZA5R4W7' },
+            { name: 'Grade 10', shortCode: '10', whatsappLink: 'https://chat.whatsapp.com/KOJD2PNrd936IHgWxLGotB' },
+            { name: 'Grade 11', shortCode: '11', whatsappLink: 'https://chat.whatsapp.com/IuCquSU1EPHB9TcORCUdrz' },
+            { name: 'Rapid Revision', shortCode: 'RR', whatsappLink: 'https://chat.whatsapp.com/DsOyVcdCWhO5SaKaWdRSLo' }
+        ];
+
+        let gradeList = configuredGrades ? [...configuredGrades] : [...defaultGrades];
+
+        // Ensure all distinct grades from students are present in gradeList
+        distinctGrades.forEach(dg => {
+            if (dg && !gradeList.some(g => (typeof g === 'string' ? g : g.name).toLowerCase() === dg.toLowerCase())) {
+                gradeList.push({
+                    name: dg,
+                    shortCode: '',
+                    whatsappLink: ''
+                });
+            }
+        });
+
+        // Normalize all items to { name, shortCode, whatsappLink }
+        let normalized = gradeList.map(g => {
+            if (typeof g === 'string') {
+                return { name: g, shortCode: '', whatsappLink: '' };
+            }
+            return {
+                name: g.name || '',
+                shortCode: g.shortCode || '',
+                whatsappLink: g.whatsappLink || ''
+            };
+        }).filter(g => g.name.trim() !== '');
+
+        // Deduplicate by lowercase name
+        const seen = new Set();
+        normalized = normalized.filter(g => {
+            const key = g.name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        // Count students per grade using aggregation
+        const counts = await Student.aggregate([
+            { $group: { _id: '$grade', count: { $sum: 1 } } }
+        ]);
+        const countMap = {};
+        counts.forEach(c => {
+            if (c._id) countMap[c._id.toLowerCase()] = c.count;
+        });
+
+        // Attach studentCount & helper shortCode if empty
+        normalized = normalized.map(g => {
+            const count = countMap[g.name.toLowerCase()] || 0;
+            let code = g.shortCode;
+            if (!code) {
+                if (g.name.toLowerCase() === 'rapid revision') {
+                    code = 'RR';
+                } else {
+                    const numMatch = g.name.match(/\d+/);
+                    if (numMatch) {
+                        code = numMatch[0].padStart(2, '0');
+                    } else {
+                        const words = g.name.trim().split(/\s+/);
+                        code = words.length > 1 ? (words[0][0] + words[1][0]).toUpperCase() : g.name.slice(0, 2).toUpperCase();
+                    }
+                }
+            }
+            return {
+                ...g,
+                shortCode: code,
+                studentCount: count
+            };
+        });
+
+        // Sort grades naturally (Grade 03, Grade 04, ..., Rapid Revision/others)
+        normalized.sort((a, b) => {
+            const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+            const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
             if (numA === 0 && numB !== 0) return 1;
             if (numB === 0 && numA !== 0) return -1;
-            if (numA === 0 && numB === 0) return a.localeCompare(b);
+            if (numA === 0 && numB === 0) return a.name.localeCompare(b.name);
             return numA - numB;
         });
-        res.json(grades);
+
+        if (detailed === 'true') {
+            return res.json(normalized);
+        }
+
+        // Return plain strings for backward compatibility
+        res.json(normalized.map(g => g.name));
     } catch (error) {
+        console.error("Error in getGrades:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// POST /students/grades
+exports.createGrade = async (req, res) => {
+    try {
+        const { name, shortCode, whatsappLink } = req.body;
+        if (!name || !name.trim()) {
+            return res.status(400).json({ message: 'Grade name is required' });
+        }
+        const trimmedName = name.trim();
+
+        const Setting = require('../models/Setting');
+        let settingRecord = await Setting.findOne({ key: 'grades_config' });
+        let grades = settingRecord && Array.isArray(settingRecord.value) ? settingRecord.value : [];
+
+        // Check if already exists in setting or students
+        const existingInStudents = await Student.findOne({ grade: trimmedName });
+        if (grades.some(g => (g.name || g).toLowerCase() === trimmedName.toLowerCase()) || existingInStudents) {
+            return res.status(400).json({ message: `Grade "${trimmedName}" already exists` });
+        }
+
+        const newGrade = {
+            name: trimmedName,
+            shortCode: (shortCode || '').trim(),
+            whatsappLink: (whatsappLink || '').trim()
+        };
+        grades.push(newGrade);
+
+        await Setting.findOneAndUpdate(
+            { key: 'grades_config' },
+            { value: grades },
+            { upsert: true, new: true }
+        );
+
+        res.status(201).json({
+            message: 'Grade created successfully',
+            grade: { ...newGrade, studentCount: 0 }
+        });
+    } catch (error) {
+        console.error("Error in createGrade:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// PUT /students/grades/:oldGrade
+exports.updateGrade = async (req, res) => {
+    try {
+        const oldGrade = decodeURIComponent(req.params.oldGrade).trim();
+        const { name, shortCode, whatsappLink } = req.body;
+
+        if (!name || !name.trim()) {
+            return res.status(400).json({ message: 'Grade name is required' });
+        }
+        const newGradeName = name.trim();
+
+        const Setting = require('../models/Setting');
+        let settingRecord = await Setting.findOne({ key: 'grades_config' });
+        let grades = settingRecord && Array.isArray(settingRecord.value) ? settingRecord.value : [];
+
+        // If grades config wasn't initialized yet, seed it with distinct grades
+        if (grades.length === 0) {
+            const distinct = await Student.distinct('grade');
+            grades = distinct.map(g => ({ name: g, shortCode: '', whatsappLink: '' }));
+        }
+
+        // Check if new name conflicts with an existing grade (other than oldGrade)
+        if (newGradeName.toLowerCase() !== oldGrade.toLowerCase()) {
+            const nameConflict = grades.some(g => (g.name || g).toLowerCase() === newGradeName.toLowerCase());
+            const studentConflict = await Student.findOne({ grade: newGradeName });
+            if (nameConflict || studentConflict) {
+                return res.status(400).json({ message: `Grade "${newGradeName}" already exists` });
+            }
+        }
+
+        // Update in grades config array
+        let found = false;
+        grades = grades.map(g => {
+            const currentName = typeof g === 'string' ? g : g.name;
+            if (currentName.toLowerCase() === oldGrade.toLowerCase()) {
+                found = true;
+                return {
+                    name: newGradeName,
+                    shortCode: shortCode !== undefined ? shortCode.trim() : (g.shortCode || ''),
+                    whatsappLink: whatsappLink !== undefined ? whatsappLink.trim() : (g.whatsappLink || '')
+                };
+            }
+            return typeof g === 'string' ? { name: g, shortCode: '', whatsappLink: '' } : g;
+        });
+
+        if (!found) {
+            grades.push({
+                name: newGradeName,
+                shortCode: (shortCode || '').trim(),
+                whatsappLink: (whatsappLink || '').trim()
+            });
+        }
+
+        await Setting.findOneAndUpdate(
+            { key: 'grades_config' },
+            { value: grades },
+            { upsert: true, new: true }
+        );
+
+        // If the grade name has changed, cascade update across all collections!
+        if (newGradeName !== oldGrade) {
+            // 1. Update Student grade
+            await Student.updateMany({ grade: oldGrade }, { $set: { grade: newGradeName } });
+
+            // 2. Update Subject gradeSchedules
+            const Subject = require('../models/Subject');
+            await Subject.updateMany(
+                { "gradeSchedules.grade": oldGrade },
+                { "$set": { "gradeSchedules.$[elem].grade": newGradeName } },
+                { arrayFilters: [{ "elem.grade": oldGrade }] }
+            );
+
+            // 3. Update Exam grade
+            const Exam = require('../models/Exam');
+            await Exam.updateMany({ grade: oldGrade }, { $set: { grade: newGradeName } });
+
+            // 4. Update ClassSession grade
+            const ClassSession = require('../models/ClassSession');
+            await ClassSession.updateMany({ grade: oldGrade }, { $set: { grade: newGradeName } });
+        }
+
+        const studentCount = await Student.countDocuments({ grade: newGradeName });
+
+        res.json({
+            message: 'Grade updated successfully',
+            grade: {
+                name: newGradeName,
+                shortCode: shortCode || '',
+                whatsappLink: whatsappLink || '',
+                studentCount
+            }
+        });
+    } catch (error) {
+        console.error("Error in updateGrade:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// DELETE /students/grades/:grade
+exports.deleteGrade = async (req, res) => {
+    try {
+        const gradeToDelete = decodeURIComponent(req.params.grade).trim();
+        const { force } = req.query;
+
+        const studentCount = await Student.countDocuments({ grade: gradeToDelete });
+        if (studentCount > 0 && force !== 'true') {
+            return res.status(400).json({
+                message: `Cannot delete "${gradeToDelete}" because ${studentCount} student(s) are currently enrolled in it.`,
+                studentCount
+            });
+        }
+
+        const Setting = require('../models/Setting');
+        let settingRecord = await Setting.findOne({ key: 'grades_config' });
+        if (settingRecord && Array.isArray(settingRecord.value)) {
+            settingRecord.value = settingRecord.value.filter(g => (g.name || g).toLowerCase() !== gradeToDelete.toLowerCase());
+            await settingRecord.save();
+        }
+
+        // Remove from Subject grade schedules
+        const Subject = require('../models/Subject');
+        await Subject.updateMany(
+            {},
+            { $pull: { gradeSchedules: { grade: gradeToDelete } } }
+        );
+
+        res.json({ message: `Grade "${gradeToDelete}" deleted successfully` });
+    } catch (error) {
+        console.error("Error in deleteGrade:", error);
         res.status(500).json({ message: error.message });
     }
 };
