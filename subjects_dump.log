@@ -1,7 +1,7 @@
 --- SUBJECTS DEBUG ---
 Name: Mathematics
 ID: 695a5473405c06a445068ac2
-Schedules: [{"grade":"Grade 07","day":"Tuesday","startDate":"2026-01-06T00:00:00.000Z","_id":"695d240c9adcb8089e64cbc8"},{"grade":"Grade 08","day":"Wednesday","startDate":"2026-01-07T00:00:00.000Z","_id":"695d240c9adcb8089e64cbc9"},{"grade":"Grade 09","day":"Friday","startDate":"2026-01-09T00:00:00.000Z","_id":"695d240c9adcb8089e64cbca"},{"grade":"Grade 10","day":"Thursday","startDate":"2026-01-08T00:00:00.000Z","_id":"695d240c9adcb8089e64cbcb"},{"grade":"Grade 11","day":"Thursday","startDate":"2026-01-08T00:00:00.000Z","_id":"695d240c9adcb8089e64cbcc"}]
+Schedules: [{"grade":"Grade 07","day":"Tuesday","startDate":"2026-01-06T00:00:00.000Z","_id":"695d240c9adcb8089e64cbc8"},{"grade":"Grade 08","day":"Wednesday","startDate":"2026-01-07T00:00:00.000Z","_id":"695d240c9adcb8089e64cbc9"},{"grade":"Grade 09","day":"Friday","startDate":"2026-01-09T00:00:00.000Z","_id":"695d240c9adcb8089e64cbca"},{"grade":"Grade 10","day":"Thursday","startDate":"2026-01-08T00:00:00.000Z","_id":"695d240c9adcb8089e64cbcb"},{"grade":"Grade 11","day":"Thursday","startDate":"2026-01-08T00:00:00.000Z","_id":"695d240c9adcb8089e64cbcc"},{"grade":"Grade 06","day":"Monday","startDate":"2026-01-19T10:19:03.447Z","_id":"696e05175fc09c5cbfad2a9d"},{"grade":"Grade 06 2027","day":"Monday","_id":"6ab4d0e37386d3fbaeb937c4"}]
 ------------------------
 Name: English
 ID: 695a5480405c06a445068acb
@@ -17,21 +17,21 @@ Schedules: []
 ------------------------
 Name: Grade 03 Scholarship
 ID: 695a54bf405c06a445068ae9
-Schedules: []
-------------------------
-Name: Grade 04 Scholarship
-ID: 695a54d2405c06a445068af2
-Schedules: []
-------------------------
-Name: Grade 05 Scholarship
-ID: 695a54df405c06a445068afb
-Schedules: []
+Schedules: [{"grade":"Grade 03","day":"Sunday","startDate":"2026-01-20T00:58:44.102Z","_id":"696ed344a9a7be8b37413bea"}]
 ------------------------
 Name: Business and Accounting Studies
 ID: 695a5592405c06a445068b9c
+Schedules: [{"grade":"Grade 10","day":"Sunday","startDate":"2026-01-20T00:58:44.546Z","_id":"696ed344a9a7be8b37413bf0"},{"grade":"Grade 11","day":"Sunday","startDate":"2026-01-20T00:58:44.546Z","_id":"696ed344a9a7be8b37413bf1"}]
+------------------------
+Name: Mathematics Rapid Revision
+ID: 6a4a79ed50d1853bb8a1a5da
+Schedules: [{"grade":"Rapid Revision","day":"Wednesday","_id":"6aafcd97e00a449792e0b4f8"}]
+------------------------
+Name: Science Rapid Revision
+ID: 6a7bf37737a9beca3d45a70c
 Schedules: []
 ------------------------
-Name: Business & Accounting Studies
-ID: 6965e00c7a26ab9250868716
+Name: Sinhala
+ID: 6ac3332fa4bcf5abc2d6777b
 Schedules: []
 ------------------------
